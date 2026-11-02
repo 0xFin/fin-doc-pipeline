@@ -1,0 +1,21 @@
+{
+  "name": "fin-doc-pipeline",
+  "version": "0.3.0",
+  "description": "Universal text-document pipeline: detect encoding, dedupe and merge multiple sources, lint and repair, typeset, and export to txt, md, html, rtf, docx, epub or pdf. Also reads docx and epub as input.",
+  "type": "module",
+  "bin": {
+    "fin-doc-pipeline": "./src/cli.mjs",
+    "fdp": "./src/cli.mjs"
+  },
+  "files": ["src", "SKILL.md", "README.md", "LICENSE", "install.sh"],
+  "engines": { "node": ">=18" },
+  "scripts": {
+    "test": "node test/run.mjs",
+    "check": "node --check src/cli.mjs"
+  },
+  "keywords": ["text", "typography", "encoding", "dedupe", "merge", "chinese", "novel", "epub", "docx", "pdf", "markdown", "html", "json", "yaml", "xml", "csv", "cli", "agent-skill", "skill"],
+  "license": "MIT",
+  "repository": { "type": "git", "url": "git+https://github.com/YOURNAME/fin-doc-pipeline.git" },
+  "homepage": "https://github.com/YOURNAME/fin-doc-pipeline#readme",
+  "bugs": { "url": "https://github.com/YOURNAME/fin-doc-pipeline/issues" }
+}

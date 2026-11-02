@@ -11,7 +11,7 @@
  * emitted with Tj and an explicit text matrix.
  */
 
-import { deflateSync } from 'node:zlib';
+import { getCodec } from '../codec.mjs';
 import { renderTitle, cleanParagraph, normalizePunctuation, reflowParagraphs } from '../typography.mjs';
 
 /** Backslash, built from its code point so no layered escaping is needed. */
@@ -275,11 +275,14 @@ export function toPdf(doc, options) {
     }
     parts.push('ET');
     const stream = parts.join('\n');
-    const compressed = deflateSync(Buffer.from(stream, 'latin1'), { level: 9 });
+    const codec = getCodec();
+    const rawStream = Buffer.from(stream, 'latin1');
+    const payload = codec.canDeflate ? codec.deflateRaw(rawStream) : rawStream;
+    const filter = codec.canDeflate ? ' /Filter /FlateDecode' : '';
 
     const contentId = add(Buffer.concat([
-      Buffer.from('<< /Length ' + compressed.length + ' /Filter /FlateDecode >>\nstream\n', 'latin1'),
-      compressed,
+      Buffer.from('<< /Length ' + payload.length + filter + ' >>\nstream\n', 'latin1'),
+      payload,
       Buffer.from('\nendstream', 'latin1'),
     ]));
 

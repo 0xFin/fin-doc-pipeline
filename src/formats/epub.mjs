@@ -6,18 +6,27 @@
  * text only.
  */
 
-import { createHash } from 'node:crypto';
 import { createZip } from '../zip.mjs';
 import { escapeXml } from '../util.mjs';
 import { renderTitle, cleanParagraph, normalizePunctuation, reflowParagraphs } from '../typography.mjs';
 
 const EPOCH = '2026-01-01T00:00:00Z';
 
+/** Small deterministic hash so the same book always gets the same identifier. */
+function hashHex(text) {
+  let h = 0x811c9dc5;
+  for (let i = 0; i < text.length; i++) {
+    h ^= text.charCodeAt(i);
+    h = Math.imul(h, 0x01000193) >>> 0;
+  }
+  return h.toString(16).padStart(8, '0');
+}
+
 /** Deterministic UUID derived from the book identity. */
 function uuidFor(seed) {
-  const hash = createHash('sha1').update(seed).digest('hex');
-  return hash.slice(0, 8) + '-' + hash.slice(8, 12) + '-' + hash.slice(12, 16) + '-' +
-    hash.slice(16, 20) + '-' + hash.slice(20, 32);
+  const hex = [0, 1, 2, 3].map((i) => hashHex(seed + '#' + i)).join('');
+  return hex.slice(0, 8) + '-' + hex.slice(8, 12) + '-' + hex.slice(12, 16) + '-' +
+    hex.slice(16, 20) + '-' + hex.slice(20, 32);
 }
 
 const STYLE = [

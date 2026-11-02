@@ -6,7 +6,7 @@
  * Only stored and deflated entries are supported, which is all these formats need.
  */
 
-import { deflateRawSync, inflateRawSync } from 'node:zlib';
+import { getCodec } from './codec.mjs';
 
 let CRC_TABLE = null;
 
@@ -50,14 +50,20 @@ export function createZip(entries) {
     const nameBuffer = Buffer.from(entry.name, 'utf8');
     const data = toBuffer(entry.data);
     const store = entry.store === true;
-    const body = store ? data : deflateRawSync(data, { level: 9 });
+    let body = data;
+    let method = 0;
+    if (!store) {
+      const packed = getCodec().deflate(data);
+      body = packed.data;
+      method = packed.method;
+    }
     const checksum = crc32(data);
 
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4);
     local.writeUInt16LE(0x0800, 6);
-    local.writeUInt16LE(store ? 0 : 8, 8);
+    local.writeUInt16LE(method, 8);
     local.writeUInt16LE(0, 10);
     local.writeUInt16LE(0x0021, 12);
     local.writeUInt32LE(checksum, 14);
@@ -72,7 +78,7 @@ export function createZip(entries) {
     dir.writeUInt16LE(20, 4);
     dir.writeUInt16LE(20, 6);
     dir.writeUInt16LE(0x0800, 8);
-    dir.writeUInt16LE(store ? 0 : 8, 10);
+    dir.writeUInt16LE(method, 10);
     dir.writeUInt16LE(0, 12);
     dir.writeUInt16LE(0x0021, 14);
     dir.writeUInt32LE(checksum, 16);
@@ -130,7 +136,7 @@ export function readZip(buffer) {
     const localExtraLength = buffer.readUInt16LE(localOffset + 28);
     const dataStart = localOffset + 30 + localNameLength + localExtraLength;
     const raw = buffer.slice(dataStart, dataStart + compressedSize);
-    const data = method === 0 ? raw : inflateRawSync(raw);
+    const data = method === 0 ? raw : getCodec().inflate(raw);
 
     out.push({ name, data });
     pointer += 46 + nameLength + extraLength + commentLength;

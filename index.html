@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>fin-doc-pipeline · 文本排版工作台</title>
+<meta name="description" content="零依赖的文本处理流水线 Web 版：编码探测、去重合并、校验、排版，导出 txt/md/html/json/yaml/xml/csv/rtf/docx/epub/pdf。">
+<style>
+  :root {
+    --bg: #fbfaf7; --panel: #ffffff; --ink: #1c1b1a; --muted: #6b6a66;
+    --line: #e6e2d8; --accent: #b4552d; --accent-soft: #f4e7df;
+    --ok: #4a7c3f; --warn: #9a6b12; --bad: #b03636; --radius: 12px;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--ink);
+    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    -webkit-font-smoothing: antialiased;
+  }
+  a { color: var(--accent); text-decoration: none; }
+  a:hover { text-decoration: underline; }
+  header { max-width: 1180px; margin: 0 auto; padding: 34px 22px 10px; }
+  header h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.01em; }
+  header p { margin: 0; color: var(--muted); font-size: 14px; }
+  .links { margin-top: 10px; display: flex; gap: 16px; font-size: 13px; flex-wrap: wrap; }
+  main {
+    max-width: 1180px; margin: 0 auto; padding: 12px 22px 60px;
+    display: grid; grid-template-columns: 420px 1fr; gap: 18px; align-items: start;
+  }
+  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
+  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
+  .panel h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
+  .drop {
+    border: 1.5px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center;
+    transition: all 0.15s ease; background: #fdfcfa;
+  }
+  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
+  .drop p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
+  button {
+    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
+    background: #fff; color: var(--ink); padding: 7px 13px; font-size: 13px; transition: all 0.15s ease;
+  }
+  button:hover { border-color: var(--accent); color: var(--accent); }
+  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
+  button.primary:hover { filter: brightness(1.05); color: #fff; }
+  button.link { border: none; background: none; color: var(--muted); padding: 2px 6px; font-size: 12px; }
+  button.link:hover { color: var(--bad); text-decoration: underline; }
+  .file-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
+  .file-row:last-child { border-bottom: none; }
+  .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .file-meta { color: var(--muted); font-family: var(--mono); font-size: 11px; }
+  .muted { color: var(--muted); font-size: 13px; }
+  textarea {
+    width: 100%; min-height: 110px; resize: vertical; padding: 12px; border-radius: 10px;
+    border: 1px solid var(--line); font-family: var(--mono); font-size: 13px; line-height: 1.6;
+    background: #fdfcfa; color: var(--ink); outline: none;
+  }
+  textarea:focus { border-color: var(--accent); }
+  .field { margin-top: 14px; }
+  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .field input[type="text"], .field input[type="number"], .field select {
+    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
+    font: inherit; font-size: 13px; background: #fff; color: var(--ink); outline: none;
+  }
+  .field input:focus, .field select:focus { border-color: var(--accent); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 12px; }
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .chip {
+    display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px;
+    border: 1px solid var(--line); font-size: 12px; font-family: var(--mono); background: #fff; cursor: pointer;
+  }
+  .chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
+  .chip input { accent-color: var(--accent); }
+  #stats { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--muted); margin-bottom: 14px; }
+  #stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
+  #stats > span:not(:last-child)::after { content: '·'; margin: 0 10px; color: #cfc9ba; }
+  #stats .ok { color: var(--ok); }
+  #stats .bad { color: var(--bad); }
+  #preview {
+    margin: 0; padding: 16px; border-radius: 10px; background: #fdfcfa; border: 1px solid var(--line);
+    white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto;
+    font-family: var(--mono); font-size: 12.5px; line-height: 1.8;
+  }
+  #status { margin: 12px 0 0; font-size: 13px; min-height: 20px; color: var(--muted); }
+  #status.ok { color: var(--ok); }
+  #status.warn { color: var(--warn); }
+  #status.bad { color: var(--bad); }
+  .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+  footer { max-width: 1180px; margin: 0 auto; padding: 0 22px 40px; color: var(--muted); font-size: 12.5px; }
+  footer code { font-family: var(--mono); background: #f3f0e9; padding: 1px 5px; border-radius: 4px; }
+  .note { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--line); color: var(--muted); font-size: 12.5px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>fin-doc-pipeline · 文本排版工作台</h1>
+  <p>零依赖的文本处理流水线，全部在浏览器本地运行，文件不会上传到任何服务器。</p>
+  <div class="links">
+    <a href="https://github.com/0xFin/fin-doc-pipeline">GitHub</a>
+    <a href="https://www.npmjs.com/package/fin-doc-pipeline">npm</a>
+    <a href="https://github.com/0xFin/fin-doc-pipeline#readme">文档</a>
+  </div>
+</header>
+
+<main>
+  <section class="panel">
+    <h2>1 · 输入</h2>
+    <div class="drop" id="drop">
+      <p>把文件拖到这里，或</p>
+      <button id="pick">选择文件</button>
+      <input type="file" id="fileInput" multiple hidden
+             accept=".txt,.text,.md,.markdown,.html,.htm,.xhtml,.rtf,.json,.jsonl,.yaml,.yml,.xml,.csv,.tsv,.js,.mjs,.cjs,.ts,.rst,.ini,.conf,.log,.srt,.tex,.org">
+    </div>
+    <div id="fileList" style="margin-top: 12px;"></div>
+
+    <div class="field">
+      <label for="paste">或直接粘贴文本</label>
+      <textarea id="paste" placeholder="粘贴任意中文/英文文本，会自动识别编码与章节结构……"></textarea>
+    </div>
+
+    <h2 style="margin-top: 22px;">2 · 排版</h2>
+    <div class="grid2">
+      <div class="field">
+        <label for="preset">预设</label>
+        <select id="preset">
+          <option value="novel">novel · 小说</option>
+          <option value="plain">plain · 纯文本</option>
+          <option value="article">article · 文章</option>
+        </select>
+      </div>
+      <div class="field">
+        <label for="mergeMode">多文件合并</label>
+        <select id="mergeMode">
+          <option value="versions">versions · 同书择优</option>
+          <option value="concat">concat · 顺序拼接</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="titleTemplate">章节标题模板（{num} 章号，{title} 副标题）</label>
+      <input type="text" id="titleTemplate" value="[第 {num} 章]">
+    </div>
+
+    <div class="grid2">
+      <div class="field">
+        <label for="numWidth">章号位数</label>
+        <input type="number" id="numWidth" value="3" min="1" max="6">
+      </div>
+      <div class="field">
+        <label for="separator">标题与副标题间隔</label>
+        <select id="separator">
+          <option value="　" selected>全角空格（　）</option>
+          <option value=" ">半角空格（ ）</option>
+          <option value="">无间隔</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="field">
+      <label for="mdHeading">Markdown 标题层级</label>
+      <select id="mdHeading">
+        <option value="auto">auto · 章 ## / 节 ###</option>
+        <option value="none">none · 不加标记</option>
+        <option value="preserve">preserve · 还原源层级</option>
+        <option value="level:2">level:2 · 全部 ##</option>
+      </select>
+    </div>
+
+    <label class="check"><input type="checkbox" id="indent" checked> 段首缩进（两个全角空格）</label>
+
+    <h2 style="margin-top: 22px;">3 · 导出</h2>
+    <div class="chips" id="formats"></div>
+    <div class="actions">
+      <button class="primary" id="export">导出所选格式</button>
+      <button id="report">下载合并报告</button>
+      <button id="clear">清空</button>
+    </div>
+  </section>
+
+  <section class="panel">
+    <h2>预览</h2>
+    <div id="stats"></div>
+    <pre id="preview"></pre>
+    <div id="status"></div>
+    <div class="note">
+      浏览器版在本地完成全部计算：编码探测、章节识别、去重合并、排版与导出。
+      DOCX / EPUB / PDF <b>输入</b>需要解压，浏览器端不提供，请用命令行（<code>npm i -g fin-doc-pipeline</code>）。
+    </div>
+  </section>
+</main>
+
+<footer>
+  支持输出：<span id="supported"></span>。命令行版功能更完整，见
+  <a href="https://github.com/0xFin/fin-doc-pipeline">README</a>。
+</footer>
+
+<script type="module">
+  import { installBuffer } from './web/buffer.mjs';
+  installBuffer();
+  const { start } = await import('./web/app.mjs');
+  start();
+</script>
+</body>
+</html>

@@ -46,6 +46,15 @@ characters and private-use glyphs. Chapter identity is `(group, number)`, so
 
 ![PDF output](assets/sample-pdf.png)
 
+## Try it online
+
+No install needed: **https://0xfin.github.io/fin-doc-pipeline/**
+
+Everything runs in the browser; files never leave your machine. The web build
+handles text inputs (txt, md, html, json, yaml, xml, csv, rtf) and exports all
+twelve formats. DOCX / EPUB / PDF **input** needs decompression and is only
+available in the CLI.
+
 ## Features
 
 - **Encoding detection** UTF-8 (BOM), UTF-16LE/BE, GBK, GB18030, Big5, ASCII

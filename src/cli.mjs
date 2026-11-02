@@ -14,6 +14,7 @@ import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import process from 'node:process';
 
+import './codec-node.mjs';
 import { detectEncoding, describeDetection } from './encoding.mjs';
 import { parseDocument, findDuplicateNumbers, findMissingNumbers, chapterCharCount } from './parser.mjs';
 import { renderDocument, DEFAULT_FORMAT, countText } from './typography.mjs';

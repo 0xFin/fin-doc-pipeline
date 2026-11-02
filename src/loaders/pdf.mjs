@@ -13,13 +13,13 @@
  * broken ToUnicode). In that case it throws instead of returning noise.
  */
 
-import { inflateSync } from 'node:zlib';
+import { getCodec } from '../codec.mjs';
 import { tidyText } from '../xml.mjs';
 
 function decodeStream(dict, raw) {
   if (!raw) return null;
   try {
-    if (/\/FlateDecode/.test(dict)) return inflateSync(raw);
+    if (/\/FlateDecode/.test(dict)) return getCodec().inflate(raw);
     if (/\/Filter/.test(dict)) return null;
     return raw;
   } catch (err) {

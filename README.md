@@ -25,6 +25,18 @@ fin-doc-pipeline merge 第一卷.txt 第二卷.txt -o 全书.txt   # 去重合�
 fin-doc-pipeline convert 全书.txt --to epub,docx,pdf      # 导出成品
 ```
 
+## 在线试用
+
+不想安装？直接用浏览器版：**https://0xfin.github.io/fin-doc-pipeline/**
+
+所有计算都在本地完成，文件不会上传。Web 版支持：
+
+- 拖入或粘贴 `.txt` `.md` `.html` `.json` `.yaml` `.xml` `.csv` `.rtf` 等文本文件
+- 编码探测（UTF-8 / UTF-16 / GBK / GB18030 / Big5）、章节识别、多文件去重合并
+- 导出 `txt` `md` `html` `json` `yaml` `xml` `csv` `js` `rtf` `docx` `epub` `pdf`
+
+浏览器端不做解压，所以 **DOCX / EPUB / PDF 作为输入**请用命令行版。
+
 ## 目录
 
 - [为什么再造一个文本工具](#为什么再造一个文本工具)

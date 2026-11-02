@@ -46,15 +46,20 @@ characters and private-use glyphs. Chapter identity is `(group, number)`, so
 
 ![PDF output](assets/sample-pdf.png)
 
-## Try it online
+## Web version
 
-No install needed: **https://0xfin.github.io/fin-doc-pipeline/**
+The browser build runs entirely locally, with no backend and no uploads:
 
-Everything runs in the browser; files never leave your machine. The web build
-handles text inputs (txt, md, html, json, yaml, xml, csv, rtf) and exports all
-twelve formats. DOCX / EPUB / PDF **input** needs decompression and is only
-available in the CLI.
+```sh
+git clone https://github.com/0xFin/fin-doc-pipeline.git
+cd fin-doc-pipeline
+python3 -m http.server 8000   # or npx serve .
+```
 
+Then open <http://localhost:8000/>. Drag in or paste text, preview live, and
+export all twelve formats. A Python one-liner is required because browsers
+refuse to load ES modules over `file://`. A GitHub Pages deployment workflow is
+included and goes live once the repository is publicly reachable.
 ## Features
 
 - **Encoding detection** UTF-8 (BOM), UTF-16LE/BE, GBK, GB18030, Big5, ASCII

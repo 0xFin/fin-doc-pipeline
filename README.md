@@ -25,18 +25,20 @@ fin-doc-pipeline merge 第一卷.txt 第二卷.txt -o 全书.txt   # 去重合�
 fin-doc-pipeline convert 全书.txt --to epub,docx,pdf      # 导出成品
 ```
 
-## 在线试用
+## Web 版
 
-不想安装？直接用浏览器版：**https://0xfin.github.io/fin-doc-pipeline/**
+Web 版完全在浏览器本地运行，没有后端、不上传文件：
 
-所有计算都在本地完成，文件不会上传。Web 版支持：
+```sh
+git clone https://github.com/0xFin/fin-doc-pipeline.git
+cd fin-doc-pipeline
+python3 -m http.server 8000   # 或 npx serve .
+```
 
-- 拖入或粘贴 `.txt` `.md` `.html` `.json` `.yaml` `.xml` `.csv` `.rtf` 等文本文件
-- 编码探测（UTF-8 / UTF-16 / GBK / GB18030 / Big5）、章节识别、多文件去重合并
-- 导出 `txt` `md` `html` `json` `yaml` `xml` `csv` `js` `rtf` `docx` `epub` `pdf`
+然后打开 <http://localhost:8000/>。可以拖入或粘贴文本、实时预览，并导出全部 12 种格式。
 
-浏览器端不做解压，所以 **DOCX / EPUB / PDF 作为输入**请用命令行版。
-
+> 直接双击 `index.html` 不行：浏览器会拦截 `file://` 下的 ES 模块加载，必须用一个静态服务器。
+> 托管版本（GitHub Pages）的部署工作流已随仓库提供，账号权限恢复后会自动上线。
 ## 目录
 
 - [为什么再造一个文本工具](#为什么再造一个文本工具)

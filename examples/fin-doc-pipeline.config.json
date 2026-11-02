@@ -1,0 +1,64 @@
+{
+  "_note": "示例配置：中文小说排版，章节标题形如 ## [第 001 章]　标题。命令行参数优先级高于本文件。",
+  "format": {
+    "chapterTitle": "[第 {num} 章]",
+    "groupChapterTitle": "[{prefix}第 {num} 章]",
+    "volumeTitle": "[第 {num} 卷]",
+    "sectionTitle": "{title}",
+    "unnumberedTitle": "{title}",
+    "specialTitle": "[{title}]",
+    "titleSeparator": "　",
+    "headingPrefix": "",
+    "headingSuffix": "",
+    "mdHeading": "auto",
+    "numWidth": 3,
+    "indent": "　　",
+    "blankBeforeTitle": 1,
+    "blankAfterTitle": 1,
+    "stripInvisible": true,
+    "reflow": false,
+    "normalizePunctuation": false
+  },
+  "structure": {
+    "rules": [
+      "manual",
+      "markdown",
+      "numbered-cn",
+      "numbered-en",
+      "cn-list",
+      "ordered",
+      "bracket",
+      "special"
+    ],
+    "markdown": {
+      "titleLevels": [
+        1
+      ],
+      "chapterLevels": [
+        2
+      ],
+      "sectionLevels": [
+        3
+      ]
+    }
+  },
+  "merge": {
+    "mode": "versions",
+    "pick": "longest",
+    "fileDedupe": true,
+    "paragraphDedupe": true,
+    "paragraphDedupeMinLength": 20
+  },
+  "output": {
+    "encoding": "utf-8",
+    "bom": false,
+    "eol": "lf"
+  },
+  "convert": {
+    "includeDocTitle": false
+  },
+  "safety": {
+    "cleanSources": false,
+    "hardDelete": false
+  }
+}

@@ -1,5 +1,7 @@
 # fin-doc-pipeline
 
+[![CI](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml)
+
 A dependency-free command line pipeline for messy real-world text: detect the
 encoding, de-duplicate and merge several sources, audit the content, typeset it
 consistently, and export it as plain text, Markdown, HTML, RTF, Word (DOCX) or
@@ -57,7 +59,7 @@ characters and private-use glyphs. Chapter identity is `(group, number)`, so
 ## Install
 
 ```sh
-git clone <repo-url> fin-doc-pipeline
+git clone https://github.com/0xFin/fin-doc-pipeline.git
 cd fin-doc-pipeline
 npm test        # 88 checks, no dependencies
 node src/cli.mjs --help
@@ -169,6 +171,13 @@ When a template omits `{title}`, the subtitle is appended after `--title-sep`.
 Output files never overwrite their source: on a name collision a `.out` marker
 is inserted (`book.txt` -> `book.out.txt`).
 
+## Example configuration
+
+A ready to use Chinese novel preset lives in
+[`examples/fin-doc-pipeline.config.json`](examples/fin-doc-pipeline.config.json).
+Copy it into your working directory as `fin-doc-pipeline.config.json` and every
+command picks it up automatically.
+
 ## Configuration
 
 Create `fin-doc-pipeline.config.json` in the working directory, or pass `--config`.
@@ -216,6 +225,13 @@ Command line flags win over the file.
 - [ ] double-encoded mojibake repair via `iconv`
 - [ ] optional cover image
 - [ ] running headers in PDF
+
+## Contributing
+
+Bugs, format requests and heading rules are all welcome. The project has no
+dependencies and that is not going to change, so contributions must use Node
+built-ins only. See [CONTRIBUTING.md](CONTRIBUTING.md) and
+[CHANGELOG.md](CHANGELOG.md).
 
 ## License
 

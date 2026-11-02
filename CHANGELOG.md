@@ -1,0 +1,28 @@
+# Changelog
+
+## 0.3.0
+
+- Configurable heading detection: `manual`, `markdown`, `numbered-cn`, `numbered-en`, `cn-list`, `ordered`, `bracket`, `special`, `heuristic`
+- Chapters and sections with separate templates and correct nesting in every output
+- Markdown level mapping (`--md-title-level`, `--md-chapter-level`, `--md-section-level`)
+- Custom heading regex, `--headings-file`, optional heuristic detection
+- Global `--heading-prefix` / `--heading-suffix`, `--md-heading` modes
+- `--unnumbered-title` for headings without a number
+- PDF output with automatic page numbers
+- Input: HTML, RTF, PDF, JSON, YAML, XML, CSV, JS and more
+- Output: JSON, YAML, XML, CSV, JS, RTF, DOCX, EPUB, PDF
+- `--no-doc-title`, `convert.includeDocTitle` in config
+- Fixed: every `--no-*` flag was ignored (argument parser strips the prefix)
+
+## 0.2.0
+
+- PDF output with embedded CJK text
+- DOCX and EPUB as input
+- `install-skill` command and npm packaging
+
+## 0.1.0
+
+- `inspect`, `format`, `merge`, `check`
+- Score based encoding detection
+- Three-level dedupe, `versions` and `concat` merge modes
+- TXT, Markdown, HTML, RTF, DOCX and EPUB writers

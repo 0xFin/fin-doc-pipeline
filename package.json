@@ -15,7 +15,7 @@
   },
   "keywords": ["text", "typography", "encoding", "dedupe", "merge", "chinese", "novel", "epub", "docx", "pdf", "markdown", "html", "json", "yaml", "xml", "csv", "cli", "agent-skill", "skill"],
   "license": "MIT",
-  "repository": { "type": "git", "url": "git+https://github.com/YOURNAME/fin-doc-pipeline.git" },
-  "homepage": "https://github.com/YOURNAME/fin-doc-pipeline#readme",
-  "bugs": { "url": "https://github.com/YOURNAME/fin-doc-pipeline/issues" }
+  "repository": { "type": "git", "url": "git+https://github.com/0xFin/fin-doc-pipeline.git" },
+  "homepage": "https://github.com/0xFin/fin-doc-pipeline#readme",
+  "bugs": { "url": "https://github.com/0xFin/fin-doc-pipeline/issues" }
 }

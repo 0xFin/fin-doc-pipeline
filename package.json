@@ -7,7 +7,7 @@
     "fin-doc-pipeline": "./src/cli.mjs",
     "fdp": "./src/cli.mjs"
   },
-  "files": ["src", "SKILL.md", "README.md", "README.zh.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "install.sh", "examples"],
+  "files": ["src", "SKILL.md", "README.md", "README.en.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "install.sh", "examples"],
   "engines": { "node": ">=18" },
   "scripts": {
     "test": "node test/run.mjs",

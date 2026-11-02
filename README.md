@@ -1,5 +1,7 @@
 # fin-doc-pipeline
 
+[English](README.md) | [简体中文](README.zh.md)
+
 [![CI](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml)
 
 A dependency-free command line pipeline for messy real-world text: detect the

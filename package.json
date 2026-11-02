@@ -7,10 +7,11 @@
     "fin-doc-pipeline": "./src/cli.mjs",
     "fdp": "./src/cli.mjs"
   },
-  "files": ["src", "SKILL.md", "README.md", "LICENSE", "install.sh"],
+  "files": ["src", "SKILL.md", "README.md", "README.zh.md", "CHANGELOG.md", "CONTRIBUTING.md", "LICENSE", "install.sh", "examples"],
   "engines": { "node": ">=18" },
   "scripts": {
     "test": "node test/run.mjs",
+    "prepublishOnly": "node test/run.mjs",
     "check": "node --check src/cli.mjs"
   },
   "keywords": ["text", "typography", "encoding", "dedupe", "merge", "chinese", "novel", "epub", "docx", "pdf", "markdown", "html", "json", "yaml", "xml", "csv", "cli", "agent-skill", "skill"],

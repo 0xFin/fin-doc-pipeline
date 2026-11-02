@@ -23,7 +23,7 @@ import { renderFormat, SUPPORTED_FORMATS, guessMetaFromFilename } from './conver
 import { isContainer, isKnownInput, isMarkup, loadDocument, loadMarkup } from './loaders/index.mjs';
 import { ForgeError, fail, pretty } from './util.mjs';
 
-const VERSION = '0.3.0';
+const VERSION = '0.3.1';
 
 /* =========================================================
    Presets

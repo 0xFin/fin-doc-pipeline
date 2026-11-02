@@ -1,5 +1,11 @@
 # Changelog
 
+## 0.3.1
+
+- Simplified Chinese is now the default README; English moved to `README.en.md`
+- Centred header with CI, npm, downloads, license and Node badges on both READMEs
+- Added table of contents, capability table, format matrix and heading rule table
+
 ## 0.3.0
 
 - Configurable heading detection: `manual`, `markdown`, `numbered-cn`, `numbered-en`, `cn-list`, `ordered`, `bracket`, `special`, `heuristic`

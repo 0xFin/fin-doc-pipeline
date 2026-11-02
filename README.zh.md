@@ -2,7 +2,7 @@
 
 [English](README.md) | **简体中文**
 
-[![CI](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml)
+[![CI](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/fin-doc-pipeline.svg)](https://www.npmjs.com/package/fin-doc-pipeline)
 
 零依赖的文本处理流水线：自动识别编码、去重合并多个来源、校验并修复内容、统一排版，
 再导出为纯文本、结构化数据、富文本、电子书或 PDF。

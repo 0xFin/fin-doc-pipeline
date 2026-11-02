@@ -2,7 +2,7 @@
 
 [English](README.md) | [简体中文](README.zh.md)
 
-[![CI](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml)
+[![CI](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml/badge.svg)](https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml) [![npm](https://img.shields.io/npm/v/fin-doc-pipeline.svg)](https://www.npmjs.com/package/fin-doc-pipeline)
 
 A dependency-free command line pipeline for messy real-world text: detect the
 encoding, de-duplicate and merge several sources, audit the content, typeset it

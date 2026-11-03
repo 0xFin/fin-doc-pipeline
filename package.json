@@ -12,6 +12,7 @@
   "scripts": {
     "test": "node test/run.mjs",
     "ship": "sh scripts/ship.sh",
+    "status": "sh scripts/status.sh",
     "prepublishOnly": "node test/run.mjs",
     "check": "node --check src/cli.mjs"
   },

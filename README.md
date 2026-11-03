@@ -120,11 +120,11 @@ fin-doc-pipeline install-skill --link       # 软链接，改代码立即生效
 
 技能目录里是**拷贝**，不是软链，所以改完 `src/` 后必须重新安装一次，否则 Agent 跑的还是旧代码。一条命令搞定测试、同步、提交、推送：
 
-`@sh
+```sh
 ./scripts/ship.sh                       # 自动提交信息
 ./scripts/ship.sh "fix: 章节排序"        # 自定义提交信息
 ./scripts/ship.sh --no-push             # 只提交，不推送
-`@
+```
 
 它依次执行：
 
@@ -135,11 +135,33 @@ fin-doc-pipeline install-skill --link       # 软链接，改代码立即生效
 
 如果不想每次手动同步，用软链模式安装一次即可：
 
-`@sh
+```sh
 ./install.sh --link
-`@
+```
 
 之后仓库里的改动会立刻被技能读到（但**仍需** `ship.sh` 或手动 `git push` 让 GitHub 同步）。
+
+查看三方是否一致：
+
+```sh
+./scripts/status.sh          # 或 npm run status
+```
+
+输出仓库、GitHub、技能目录三者状态，有差异时以非 0 退出。
+
+### 删除文件会怎样
+
+三处是**独立**的，删除不会自动传导：
+
+| 操作 | 本地仓库 | GitHub | 技能目录 |
+| --- | --- | --- | --- |
+| `rm 文件` | 没了 | 不变 | 不变 |
+| 再 `git push` | 没了 | main 上没了（历史里还在） | 不变 |
+| 再 `./install.sh` | 没了 | 没了 | 没了（先删后拷） |
+
+所以「A 有、B 没有」技术上完全可能，但不建议：技能会继续跑旧代码，GitHub 上也是旧的。一条 `./scripts/ship.sh` 就能把三者拉回一致。
+
+> 软链模式（`install.sh --link`）下技能目录就是仓库本身，A 和 C 天然合一，只剩 GitHub 需要 push。
 
 ## 快速开始
 

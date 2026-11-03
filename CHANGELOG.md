@@ -1,5 +1,21 @@
 # Changelog
 
+## 0.5.0 — 2026-11-04
+
+- `index.html` is now one self contained file: the whole browser build
+  (encoding detection, parser, merger, linter, typesetters, all twelve writers
+  and the Buffer polyfill) is inlined into a single classic `<script>`, so the
+  page runs from `file://` with no server, no network and no CORS errors, and
+  can be bookmarked like any other page
+- Sources moved to `web/index.template.html` + `web/app.mjs`;
+  `scripts/build-web.mjs` regenerates `index.html` (`npm run build`, or
+  `node scripts/build-web.mjs --check` in CI)
+- The old `file://` warning is replaced by a watchdog: if the bundle ever fails
+  to run the page says so and explains how to rebuild it
+- `index.html` and `web/` now ship in the npm package
+- `start.command` is optional: it is only useful for a stable `http://` address
+- 95 tests, four of which cover the generated single file
+
 ## 0.4.0 — 2026-11-03
 
 - Web UI rebuilt on the original warm-theme design: one batch file slot, merge

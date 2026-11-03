@@ -22,13 +22,16 @@ for arg in "$@"; do
   esac
 done
 
-echo "== 1/4 运行测试 =="
+echo "== 1/5 生成单文件 index.html =="
+node scripts/build-web.mjs
+
+echo "== 2/5 运行测试 =="
 node test/run.mjs
 
-echo "== 2/4 同步到技能目录 =="
+echo "== 3/5 同步到技能目录 =="
 ./install.sh
 
-echo "== 3/4 提交 =="
+echo "== 4/5 提交 =="
 if [ -z "$(git status --porcelain)" ]; then
   echo "  没有改动需要提交"
 else
@@ -38,10 +41,10 @@ else
 fi
 
 if [ "$PUSH" = "no" ]; then
-  echo "== 4/4 跳过推送（--no-push） =="
+  echo "== 5/5 跳过推送（--no-push） =="
   exit 0
 fi
 
-echo "== 4/4 推送到 GitHub =="
+echo "== 5/5 推送到 GitHub =="
 GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=20' git push origin HEAD
 echo "  已推送 $(git log --oneline -1)"

@@ -48,18 +48,30 @@ characters and private-use glyphs. Chapter identity is `(group, number)`, so
 
 ## Web version
 
-The browser build runs entirely locally, with no backend and no uploads:
+The browser build runs entirely locally, with no backend and no uploads.
+
+**`index.html` works opened straight from disk.** Encoding detection, parsing,
+merging, typesetting and all twelve export formats are inlined into that one
+file, so it runs offline — from a USB stick, with no server and no
+`start.command`. Drop it into a browser tab and bookmark the `file://` URL.
+
+`index.html` is generated: the markup and styles live in
+`web/index.template.html`, the behaviour in `web/app.mjs`. Edit those and run
+`npm run build` to inline them again.
+
+A local server is only needed for a stable `http://` address (for example to
+open the page from a phone on the same network) or for development:
 
 ```sh
 git clone https://github.com/0xFin/fin-doc-pipeline.git
 cd fin-doc-pipeline
-python3 -m http.server 8000   # or npx serve .
+./start.command                 # macOS: double clicking works too
+python3 -m http.server 8000     # or manually
 ```
 
-Then open <http://localhost:8000/>. Drag in or paste text, preview live, and
-export all twelve formats. A Python one-liner is required because browsers
-refuse to load ES modules over `file://`. A GitHub Pages deployment workflow is
-included and goes live once the repository is publicly reachable.
+> The browser build only takes text inputs (txt / md / html / json / csv …).
+> DOCX / EPUB / PDF input needs decompression, so use the CLI for those; all
+> twelve export formats work in the browser.
 ## Features
 
 - **Encoding detection** UTF-8 (BOM), UTF-16LE/BE, GBK, GB18030, Big5, ASCII

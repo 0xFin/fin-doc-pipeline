@@ -29,21 +29,20 @@ fin-doc-pipeline convert 全书.txt --to epub,docx,pdf      # 导出成品
 
 Web 版完全在浏览器本地运行，没有后端、不上传文件。
 
-**macOS 最省事**：双击仓库根目录的 `start.command`，它会自动起服务并打开浏览器；关闭终端窗口即停止。
+**直接双击 `index.html` 就能用。** 编码识别、解析、合并、排版和 12 种格式导出全部内联在这一个文件里，离线、断网、拷进 U 盘都能跑，不需要本地服务器，也不需要 `start.command`。把文件拖进浏览器标签页打开，收藏那个 `file://` 地址即可当成书签。
 
-也可以手动启动：
+`index.html` 是生成产物，不要手改：页面结构与样式在 `web/index.template.html`，交互逻辑在 `web/app.mjs`，改完运行 `npm run build` 重新内联。
+
+只有想固定一个 `http://` 地址（比如让同一局域网的手机打开）或做二次开发时，才需要起本地服务：
 
 ```sh
 git clone https://github.com/0xFin/fin-doc-pipeline.git
 cd fin-doc-pipeline
-python3 -m http.server 8000   # 或 npx serve .
+./start.command                 # macOS：双击也行，自动挑端口并打开浏览器
+python3 -m http.server 8000     # 或者手动
 ```
 
-然后打开 <http://localhost:8000/>。可以拖入或粘贴文本、实时预览，并导出全部 12 种格式。
-
-> **直接双击 `index.html` 不行**：浏览器会拦截 `file://` 下的 ES 模块加载（控制台报 CORS 错误），
-> 所有处理按钮都不会响应——明暗主题除外，页面会检测到这种情况并显示提示。必须走本地服务。
-> 托管版本（GitHub Pages）的部署工作流已随仓库提供，账号权限恢复后会自动上线。
+> 浏览器版只接受文本类输入（txt / md / html / json / csv…）。DOCX / EPUB / PDF **输入**需要解压，请用命令行处理；导出这 12 种格式不受影响。
 ## 目录
 
 - [为什么再造一个文本工具](#为什么再造一个文本工具)
@@ -274,7 +273,12 @@ src/loaders/         docx / epub / pdf / html / rtf / 各类文本输入
 src/formats/         docx / epub / pdf / rtf / json / yaml / xml / csv / js 输出
 src/zip.mjs          零依赖 ZIP 读写（DOCX / EPUB 的基础）
 src/cli.mjs          命令行入口
-test/run.mjs         零依赖测试套件（88 项）
+web/index.template.html  单文件页面的结构与样式
+web/app.mjs          浏览器端交互逻辑
+web/buffer.mjs       浏览器用的最小 Buffer 实现
+scripts/build-web.mjs    把 web/ 与 src/ 内联成单文件 index.html
+index.html           生成产物：可离线双击打开的单文件页面
+test/run.mjs         零依赖测试套件（95 项）
 ```
 
 ## 路线图

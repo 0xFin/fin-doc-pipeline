@@ -30,6 +30,7 @@ import { loadDocx } from '../src/loaders/docx.mjs';
 import { loadEpub } from '../src/loaders/epub.mjs';
 import { isContainer, isKnownInput, loadDocument, formatOf, loadMarkup } from '../src/loaders/index.mjs';
 import { toJson, toYaml, toXml, toCsv, toJs } from '../src/formats/data.mjs';
+import { render as renderWebIndex, bundle as bundleWeb } from '../scripts/build-web.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(HERE, '..', 'src', 'cli.mjs');
@@ -865,6 +866,44 @@ group('heading customisation', () => {
     assert.equal(markdownMarker(doc.chapters[0], { mdHeading: 'none' }), '');
     assert.equal(markdownMarker(doc.chapters[0], { mdHeading: 'level:4' }), '####');
     assert.equal(markdownMarker(doc.chapters[0], { mdHeading: 'preserve' }), '##');
+  });
+});
+
+group('web single file', () => {
+  const indexFile = path.join(HERE, '..', 'index.html');
+
+  test('index.html matches the sources it is generated from', () => {
+    const { html } = renderWebIndex();
+    assert.equal(fs.readFileSync(indexFile, 'utf8'), html);
+  });
+
+  test('index.html pulls in no external script or stylesheet', () => {
+    const html = fs.readFileSync(indexFile, 'utf8');
+    const tags = html.match(/<script\b[^>]*>/g) || [];
+    assert.equal(tags.length, 2);
+    assert.ok(tags.every((tag) => !/\ssrc=/i.test(tag)));
+    assert.ok(!html.includes('<script type="module">'));
+    const template = fs.readFileSync(path.join(HERE, '..', 'web', 'index.template.html'), 'utf8');
+    assert.ok(!/<link[^>]+stylesheet/.test(template));
+    assert.ok(!/<script[^>]+\ssrc=/.test(template));
+  });
+
+  test('the bundle inlines the browser graph only', () => {
+    const { source, modules } = bundleWeb();
+    assert.ok(modules.includes('web/buffer.mjs'));
+    assert.ok(modules.includes('src/converters.mjs'));
+    assert.ok(modules.includes('web/app.mjs'));
+    assert.ok(!modules.includes('src/cli.mjs'));
+    assert.ok(!modules.includes('src/codec-node.mjs'));
+    assert.ok(!modules.some((id) => id.startsWith('src/loaders/')));
+    assert.ok(source.includes("__require('web/app.mjs');"));
+    assert.ok(source.includes("__require('web/buffer.mjs').installBuffer();"));
+  });
+
+  test('the page reports when the bundle did not run', () => {
+    const html = fs.readFileSync(indexFile, 'utf8');
+    assert.ok(html.includes('__TEXT_TOOL_READY__'));
+    assert.ok(html.includes('页面脚本没有加载'));
   });
 });
 

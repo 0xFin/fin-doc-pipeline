@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+- Fix the merge ordering: a single source is passed through untouched, and
+  multi-file merges follow the most complete source instead of stacking every
+  special chapter first, then volumes, then chapters (`全文完` no longer jumps to
+  the front and volumes no longer precede chapter 1)
+
 - Web UI rewritten on top of the original warm-theme design: one batch file slot,
   merge/independent switch, format chips, live preview, stats and merge report
 - Chapter template default is now `## [第 {num} 章]　{title}`; the `##` is treated

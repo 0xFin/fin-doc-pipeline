@@ -158,6 +158,27 @@ export function mergeDocuments(sources, options) {
     };
   }
 
+  /* ---------- 1c. a single source is passed through untouched ---------- */
+  if (active.length === 1) {
+    const src = active[0];
+    const chapters = src.doc.chapters.map((c, i) => ({
+      ...c,
+      id: 'c-' + String(i + 1).padStart(3, '0'),
+      paragraphs: c.paragraphs.slice(),
+      sections: (c.sections || []).map((s) => ({ ...s, paragraphs: s.paragraphs.slice() })),
+    }));
+    report.mode = 'versions';
+    report.singleSource = src.label;
+    return {
+      doc: {
+        frontMatter: (src.doc.frontMatter || []).slice(),
+        chapters,
+        hasChapters: chapters.some((c) => c.kind === 'chapter'),
+      },
+      report,
+    };
+  }
+
   report.mode = 'versions';
 
   /* ---------- 2. front matter ---------- */
@@ -298,7 +319,7 @@ export function mergeDocuments(sources, options) {
         report.paragraphDedupeRemoved += res.removed;
         return { ...section, paragraphs: res.paragraphs };
       });
-      flat.push({ ...single, paragraphs, sections });
+      flat.push({ ...single, key: entry.key, paragraphs, sections });
       continue;
     }
 
@@ -313,6 +334,7 @@ export function mergeDocuments(sources, options) {
     }
     flat.push({
       ...entry.parts[0],
+      key: entry.key,
       id: entry.parts[0].id,
       subtitle: entry.parts.map((p) => p.subtitle).filter(Boolean).join(' / '),
       paragraphs,
@@ -322,22 +344,46 @@ export function mergeDocuments(sources, options) {
     });
   }
 
-  /* ---------- 7. ordering ---------- */
-  const groupRank = (g) => {
-    const idx = groupOrder.indexOf(g);
-    return idx < 0 ? 999 : idx;
-  };
-  flat.sort((a, b) => {
-    const ga = groupRank(a.group);
-    const gb = groupRank(b.group);
-    if (ga !== gb) return ga - gb;
-    return (a.num === null ? 0 : a.num) - (b.num === null ? 0 : b.num);
-  });
+  /* ---------- 7. ordering: follow the most complete source ---------- */
+  // Hanging every kind of block in its own pile (specials, then volumes, then
+  // chapters) scrambles a book whose parts interleave, so walk the reference
+  // document and place each block where it originally sat.
+  const base = active.reduce((a, b) => (b.doc.chapters.length > a.doc.chapters.length ? b : a));
+  report.baseSource = base.label;
+
+  const specialByTitle = new Map(specialOut.map((c) => [stripBrackets(c.rawTitle), c]));
+  const volumeByNum = new Map(volumes.map((c) => [c.num, c]));
+  const flatByKey = new Map(flat.map((c) => [c.key, c]));
 
   const ordered = [];
-  ordered.push(...specialOut);
-  ordered.push(...volumes);
-  ordered.push(...flat);
+  const placed = new Set();
+  const place = (block) => {
+    if (!block) return;
+    ordered.push(block);
+  };
+
+  for (const c of base.doc.chapters) {
+    if (c.kind === 'special') {
+      const key = stripBrackets(c.rawTitle);
+      if (placed.has('s:' + key)) continue;
+      placed.add('s:' + key);
+      place(specialByTitle.get(key));
+    } else if (c.kind === 'volume') {
+      if (placed.has('v:' + c.num)) continue;
+      placed.add('v:' + c.num);
+      place(volumeByNum.get(c.num));
+    } else if (c.kind === 'chapter') {
+      const key = chapterKey(c);
+      if (placed.has('c:' + key)) continue;
+      placed.add('c:' + key);
+      place(flatByKey.get(key));
+    }
+  }
+
+  // Blocks that only exist in the other sources go last, keeping their own order.
+  for (const c of specialOut) if (!placed.has('s:' + stripBrackets(c.rawTitle))) ordered.push(c);
+  for (const v of volumes) if (!placed.has('v:' + v.num)) ordered.push(v);
+  for (const c of flat) if (!placed.has('c:' + c.key)) ordered.push(c);
 
   // Stable ids after the merge.
   ordered.forEach((c, i) => {

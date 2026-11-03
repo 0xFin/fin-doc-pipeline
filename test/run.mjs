@@ -262,6 +262,31 @@ group('merge', () => {
     assert.equal(res2.removed, 1);
   });
 
+  test('a single source keeps its document order', () => {
+    const doc = parseDocument('前言\n前言正文\n[第1章] 开端\n正文\n[第2卷] 卷二\n[第3章] 卷内\n卷内正文\n全文完');
+    const { doc: merged } = mergeDocuments([{ label: 'book.txt', doc }], { mode: 'versions' });
+    const idx = (needle) => merged.chapters.findIndex((c) => c.rawTitle.includes(needle));
+    assert.equal(idx('前言'), 0);
+    assert.equal(idx('全文完'), merged.chapters.length - 1);
+    assert.ok(idx('第1章') < idx('第2卷'));
+    assert.ok(idx('第2卷') < idx('第3章'));
+  });
+
+  test('merging versions keeps the base document order', () => {
+    const short = parseDocument('前言\n短文\n[第1章] 一\n甲\n[第2卷] 卷二\n[第3章] 二\n乙\n全文完');
+    const long = parseDocument('前言\n更长的前言文字\n[第1章] 一\n甲，更完整\n[第2卷] 卷二\n[第3章] 二\n乙，更完整\n全文完');
+    const { doc } = mergeDocuments([
+      { label: 'short.txt', doc: short },
+      { label: 'long.txt', doc: long },
+    ], { mode: 'versions' });
+    const idx = (needle) => doc.chapters.findIndex((c) => c.rawTitle.includes(needle));
+    assert.equal(idx('前言'), 0);
+    assert.equal(idx('全文完'), doc.chapters.length - 1);
+    assert.ok(idx('第1章') < idx('第2卷'));
+    assert.ok(idx('第2卷') < idx('第3章'));
+    assert.ok(doc.chapters[0].paragraphs.join('').includes('更长'));
+  });
+
   test('report renders as markdown', () => {
     const { report } = mergeDocuments([
       { label: 'a.txt', doc: a },

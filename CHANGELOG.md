@@ -13,6 +13,8 @@
 - Layout pass: title is now 「文本文档处理器」, larger headings, mode + strategy
   side by side, three formatting fields in a row, placeholder legend, and the
   redundant clean/indent checkboxes removed
+- Download is one button next to 「开始处理」 that appears after a run; the preview
+  header now reports line and character counts instead of per-file links
 
 ## 0.3.1
 

@@ -186,7 +186,7 @@
   /* ===== 预览区 ===== */
   .preview {
     background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm);
-    padding: 16px; max-height: 340px; overflow: auto; font-size: 13px; line-height: 1.7;
+    padding: 16px; max-height: 440px; overflow: auto; font-size: 13px; line-height: 1.7;
     white-space: pre-wrap; word-break: break-all; color: var(--text-primary);
   }
   .preview::-webkit-scrollbar { width: 6px; }
@@ -198,6 +198,7 @@
     gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
   }
   .preview-header h2 { margin-bottom: 0; }
+  .preview-meta { font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
   /* ===== 下载链接 ===== */
   .download-row {
@@ -295,10 +296,16 @@
   @media (max-width: 760px) { .grid3 { grid-template-columns: 1fr; } }
   @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
 
-  .inline-row { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+  .inline-row { display: grid; grid-template-columns: 1fr 1fr; align-items: end; margin-top: 20px; }
   .inline-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .inline-item:first-child { padding-right: 28px; border-right: 1px solid var(--border); }
+  .inline-item:last-child { padding-left: 28px; }
   .inline-item > label, .inline-item > .inline-label { font-size: 13px; color: var(--text-secondary); }
-  .inline-item.grow { flex: 1 1 280px; }
+  @media (max-width: 720px) {
+    .inline-row { grid-template-columns: 1fr; }
+    .inline-item:first-child { padding-right: 0; border-right: none; padding-bottom: 18px; border-bottom: 1px solid var(--border); }
+    .inline-item:last-child { padding-left: 0; padding-top: 18px; }
+  }
   .inline-item select {
     width: 100%; padding: 10px 14px; border-radius: var(--radius-sm);
     border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary);
@@ -383,7 +390,7 @@
         <button type="button" data-mode="separate">每个文件分别处理</button>
       </div>
     </div>
-    <div class="inline-item grow" id="mergeOptions">
+    <div class="inline-item" id="mergeOptions">
       <label for="mergeStrategy">合并策略</label>
       <select id="mergeStrategy">
         <option value="versions">versions · 同一本书的不同版本，逐章择优</option>
@@ -418,7 +425,7 @@
     <span class="token"><code>{raw}</code><em>原始标题整行</em></span>
   </div>
   <p class="note-line">
-    txt / md 输出会自动在最前面加 <code>## </code>；docx / PDF / EPUB 使用真正的标题样式，不会出现字面井号。
+    txt / md 输出会自动在最前面加 <code>## </code>；docx / PDF / EPUB 使用真正的标题样式，不会出现字面 <code>#</code>。
   </p>
 </div>
 
@@ -427,6 +434,7 @@
   <div class="chips" id="formats"></div>
   <div class="row-actions">
     <button class="btn-primary" id="btnProcess">开始处理</button>
+    <button class="btn-primary" id="btnDownload" hidden>下载文档</button>
   </div>
   <div id="status"></div>
 </div>
@@ -434,7 +442,7 @@
 <div class="card" id="previewBox" hidden>
   <div class="preview-header">
     <h2>结果预览（前 2000 字）</h2>
-    <div class="download-row" id="downloadRow"></div>
+    <span class="preview-meta" id="previewMeta"></span>
   </div>
   <div class="preview" id="preview"></div>
 </div>
@@ -468,7 +476,7 @@ const state = {
   files: [],
   mode: 'merge',
   strategy: 'versions',
-  result: null,
+  outputs: [],
 };
 
 const $ = (id) => document.getElementById(id);
@@ -527,7 +535,13 @@ async function addFiles(list) {
   }
 }
 
+function resetOutputs() {
+  state.outputs = [];
+  $('btnDownload').hidden = true;
+}
+
 function renderFiles() {
+  resetOutputs();
   const box = $('fileList');
   if (!state.files.length) {
     box.innerHTML = '<p class="empty">还没有文件。选择或拖入文本后开始。</p>';
@@ -639,13 +653,15 @@ function processFiles() {
   try {
     const entries = buildEntries();
     const base = readFormatOptions();
-    state.result = { entries, formats, base };
+    state.outputs = buildOutputs(entries, formats, base);
 
     const previewSource = renderEntry(entries[0], 'txt', base).buffer.toString('utf8');
-    $('preview').textContent = previewSource.slice(0, 2000) + (previewSource.length > 2000 ? '\n\n……（已截断）' : '');
+    const truncated = previewSource.length > 2000;
+    $('preview').textContent = (truncated ? previewSource.slice(0, 2000) + '\n\n……（已截断，仅显示前 2000 字）' : previewSource);
+    $('previewMeta').textContent = '共 ' + previewSource.split('\n').length + ' 行 · ' + previewSource.length + ' 字' + (truncated ? ' · 已截断' : '');
     $('previewBox').hidden = false;
+    $('btnDownload').hidden = false;
 
-    renderDownloads(entries, formats, base);
     renderStats(entries, formats, base);
     renderReport(entries);
     setStatus('处理完成：' + entries.length + ' 个成品 × ' + formats.length + ' 种格式', 'ok');
@@ -655,23 +671,28 @@ function processFiles() {
   }
 }
 
-function renderDownloads(entries, formats, base) {
-  const row = $('downloadRow');
-  row.innerHTML = '';
+function buildOutputs(entries, formats, base) {
+  const outputs = [];
   for (const entry of entries) {
     for (const format of formats) {
       const rendered = renderEntry(entry, format, base);
-      const link = document.createElement('a');
-      link.href = '#';
-      link.className = 'download-link';
-      link.textContent = '⬇ ' + entry.stem + '.' + rendered.extension;
-      link.addEventListener('click', (event) => {
-        event.preventDefault();
-        download(entry.stem + '.' + rendered.extension, rendered.buffer, rendered.binary);
+      outputs.push({
+        name: entry.stem + '.' + rendered.extension,
+        buffer: rendered.buffer,
+        binary: rendered.binary,
       });
-      row.appendChild(link);
     }
   }
+  return outputs;
+}
+
+function downloadAll() {
+  const outputs = state.outputs || [];
+  if (!outputs.length) { setStatus('还没有可下载的成品，请先点击开始处理', 'error'); return; }
+  outputs.forEach((item, index) => {
+    setTimeout(() => download(item.name, item.buffer, item.binary), index * 150);
+  });
+  setStatus('已开始下载 ' + outputs.length + ' 个文件', 'ok');
 }
 
 function renderStats(entries, formats, base) {
@@ -741,6 +762,7 @@ function renderReport(entries) {
 
 $('mergeStrategy').addEventListener('change', () => { state.strategy = $('mergeStrategy').value; });
 $('btnProcess').addEventListener('click', processFiles);
+$('btnDownload').addEventListener('click', downloadAll);
 
 renderFiles();
 setStatus('准备就绪：选择或拖入文本后点击「开始处理」', '');

@@ -26,6 +26,9 @@ export const DEFAULT_FORMAT = {
   /** Literal decoration around every rendered heading (all outputs). */
   headingPrefix: '',
   headingSuffix: '',
+  /** Optional overrides for sections; empty means reuse the heading prefix. */
+  sectionPrefix: '',
+  sectionSuffix: '',
   /** Markdown heading markers for md output: auto | none | preserve | level:N. */
   mdHeading: 'auto',
   /** Placed between the bracketed number and the subtitle. */
@@ -127,6 +130,9 @@ export function renderTitle(ch, fmt) {
     title = applyTemplate(template, titleValues(ch, f, ch.subtitle));
   }
 
+  if (ch.kind === 'section') {
+    return (f.sectionPrefix || f.headingPrefix || '') + title + (f.sectionSuffix || f.headingSuffix || '');
+  }
   return (f.headingPrefix || '') + title + (f.headingSuffix || '');
 }
 

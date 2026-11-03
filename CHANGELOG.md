@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- Web UI rewritten on top of the original warm-theme design: one batch file slot,
+  merge/independent switch, format chips, live preview, stats and merge report
+- Chapter template default is now `## [第 {num} 章]　{title}`; the `##` is treated
+  as a Markdown marker, so DOCX/PDF/EPUB get a real heading instead of a literal
+  hash sign
+- `sectionPrefix` option: text output can mark sections differently from chapters
+- Browser build refuses DOCX/EPUB/PDF input with a clear message instead of
+  producing garbage
+
 ## 0.3.1
 
 - Simplified Chinese is now the default README; English moved to `README.en.md`

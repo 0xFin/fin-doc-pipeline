@@ -1,207 +1,723 @@
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<title>fin-doc-pipeline · 文本排版工作台</title>
-<meta name="description" content="零依赖的文本处理流水线 Web 版：编码探测、去重合并、校验、排版，导出 txt/md/html/json/yaml/xml/csv/rtf/docx/epub/pdf。">
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TXT 文本合并与排版工具</title>
 <style>
+/* ===== Claude 暖色主题变量 ===== */
   :root {
-    --bg: #fbfaf7; --panel: #ffffff; --ink: #1c1b1a; --muted: #6b6a66;
-    --line: #e6e2d8; --accent: #b4552d; --accent-soft: #f4e7df;
-    --ok: #4a7c3f; --warn: #9a6b12; --bad: #b03636; --radius: 12px;
-    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+    /* Light Theme */
+    --bg: #faf9f5;
+    --bg-elevated: #ffffff;
+    --bg-subtle: #f5f0e8;
+    --bg-hover: #e8e6dc;
+    --text-primary: #141413;
+    --text-secondary: #5e5d59;
+    --text-muted: #b0aea5;
+    --border: #e8e6dc;
+    --border-strong: #d5d0c4;
+    --accent: #d97757;
+    --accent-hover: #c96442;
+    --accent-light: rgba(217, 119, 87, 0.12);
+    --success: #788c5d;
+    --error: #b53333;
+    --shadow: 0 1px 3px rgba(20, 20, 19, 0.06), 0 1px 2px rgba(20, 20, 19, 0.04);
+    --shadow-lg: 0 4px 16px rgba(20, 20, 19, 0.08);
+    --radius: 12px;
+    --radius-sm: 8px;
+    --font: "Inter", "SF Pro Text", -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
   }
-  * { box-sizing: border-box; }
+
+  /* Dark Theme */
+  [data-theme="dark"] {
+    --bg: #141413;
+    --bg-elevated: #262624;
+    --bg-subtle: #1f1e1b;
+    --bg-hover: #30302e;
+    --text-primary: #faf9f5;
+    --text-secondary: #a09d96;
+    --text-muted: #6c6a64;
+    --border: #30302e;
+    --border-strong: #4d4c48;
+    --accent: #d97757;
+    --accent-hover: #e88b6a;
+    --accent-light: rgba(217, 119, 87, 0.15);
+    --success: #788c5d;
+    --error: #c64545;
+    --shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+    --shadow-lg: 0 4px 16px rgba(0, 0, 0, 0.4);
+  }
+
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+
   body {
-    margin: 0; background: var(--bg); color: var(--ink);
-    font: 15px/1.7 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", sans-serif;
+    font-family: var(--font);
+    background: var(--bg);
+    color: var(--text-primary);
+    line-height: 1.6;
+    font-size: 15px;
+    padding: 40px 24px 64px;
     -webkit-font-smoothing: antialiased;
+    transition: background-color 0.3s ease, color 0.3s ease;
   }
-  a { color: var(--accent); text-decoration: none; }
-  a:hover { text-decoration: underline; }
-  header { max-width: 1180px; margin: 0 auto; padding: 34px 22px 10px; }
-  header h1 { margin: 0 0 6px; font-size: 24px; letter-spacing: -0.01em; }
-  header p { margin: 0; color: var(--muted); font-size: 14px; }
-  .links { margin-top: 10px; display: flex; gap: 16px; font-size: 13px; flex-wrap: wrap; }
-  main {
-    max-width: 1180px; margin: 0 auto; padding: 12px 22px 60px;
-    display: grid; grid-template-columns: 420px 1fr; gap: 18px; align-items: start;
+
+  /* ===== 顶栏 ===== */
+  .topbar {
+    max-width: 960px;
+    margin: 0 auto 32px;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
   }
-  @media (max-width: 900px) { main { grid-template-columns: 1fr; } }
-  .panel { background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 18px; }
-  .panel h2 { margin: 0 0 14px; font-size: 13px; text-transform: uppercase; letter-spacing: 0.08em; color: var(--muted); font-weight: 600; }
-  .drop {
-    border: 1.5px dashed var(--line); border-radius: 10px; padding: 22px; text-align: center;
-    transition: all 0.15s ease; background: #fdfcfa;
+
+  .brand { display: flex; align-items: center; gap: 10px; }
+  .brand-mark {
+    width: 28px; height: 28px; border-radius: 8px;
+    background: var(--accent); display: flex; align-items: center; justify-content: center;
+    color: #fff; font-weight: 700; font-size: 14px; flex-shrink: 0;
   }
-  .drop.over { border-color: var(--accent); background: var(--accent-soft); }
-  .drop p { margin: 0 0 10px; color: var(--muted); font-size: 13px; }
-  button {
-    font: inherit; cursor: pointer; border-radius: 8px; border: 1px solid var(--line);
-    background: #fff; color: var(--ink); padding: 7px 13px; font-size: 13px; transition: all 0.15s ease;
+  .brand h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
+
+  .theme-toggle {
+    display: flex; align-items: center; gap: 8px; padding: 8px 14px;
+    border-radius: 999px; border: 1px solid var(--border); background: var(--bg-elevated);
+    color: var(--text-secondary); font-family: var(--font); font-size: 13px; font-weight: 500;
+    cursor: pointer; transition: all 0.2s ease; box-shadow: var(--shadow);
   }
-  button:hover { border-color: var(--accent); color: var(--accent); }
-  button.primary { background: var(--accent); border-color: var(--accent); color: #fff; }
-  button.primary:hover { filter: brightness(1.05); color: #fff; }
-  button.link { border: none; background: none; color: var(--muted); padding: 2px 6px; font-size: 12px; }
-  button.link:hover { color: var(--bad); text-decoration: underline; }
-  .file-row { display: flex; align-items: center; gap: 10px; padding: 8px 0; border-bottom: 1px solid var(--line); font-size: 13px; }
-  .file-row:last-child { border-bottom: none; }
-  .file-name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-  .file-meta { color: var(--muted); font-family: var(--mono); font-size: 11px; }
-  .muted { color: var(--muted); font-size: 13px; }
-  textarea {
-    width: 100%; min-height: 110px; resize: vertical; padding: 12px; border-radius: 10px;
-    border: 1px solid var(--line); font-family: var(--mono); font-size: 13px; line-height: 1.6;
-    background: #fdfcfa; color: var(--ink); outline: none;
+  .theme-toggle:hover { border-color: var(--border-strong); background: var(--bg-hover); color: var(--text-primary); }
+  .theme-toggle svg { width: 16px; height: 16px; flex-shrink: 0; transition: transform 0.3s ease; }
+  [data-theme="dark"] .theme-toggle svg.sun { display: none; }
+  [data-theme="dark"] .theme-toggle svg.moon { display: block; }
+  .theme-toggle svg.moon { display: none; }
+
+  /* ===== 卡片 ===== */
+  .card {
+    max-width: 960px; margin: 0 auto 20px; background: var(--bg-elevated);
+    border: 1px solid var(--border); border-radius: var(--radius); padding: 24px;
+    box-shadow: var(--shadow); transition: background-color 0.3s ease, border-color 0.3s ease;
+    animation: fadeUp 0.35s ease both;
   }
-  textarea:focus { border-color: var(--accent); }
-  .field { margin-top: 14px; }
-  .field label { display: block; font-size: 12px; color: var(--muted); margin-bottom: 5px; }
+  .card h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 16px; color: var(--text-primary); }
+
+  /* ===== 文本选择 ===== */
+  .file-row {
+    display: flex; align-items: center; gap: 12px; padding: 12px 0; border-bottom: 1px solid var(--border);
+  }
+  .file-row:last-of-type { border-bottom: none; }
+  .file-row label { font-size: 14px; font-weight: 500; color: var(--text-primary); flex-shrink: 0; width: 70px; }
+  .file-input-wrap { flex: 1; position: relative; display: flex; align-items: center; gap: 12px; }
+
+  .file-btn {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px;
+    border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-subtle);
+    color: var(--text-secondary); font-size: 13px; font-weight: 500; cursor: pointer;
+    transition: all 0.2s ease; white-space: nowrap;
+  }
+  .file-btn:hover { background: var(--bg-hover); border-color: var(--border-strong); color: var(--text-primary); }
+  .file-btn:active { transform: scale(0.98); }
+  .file-input-wrap input[type="file"] { position: absolute; width: 100%; height: 100%; opacity: 0; cursor: pointer; top: 0; left: 0; }
+  .file-name { font-size: 13px; color: var(--text-muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .file-name.has-file { color: var(--text-secondary); font-weight: 500; }
+
+  /* 提示与选项 */
+  .hint { font-size: 13px; color: var(--text-muted); margin-top: 12px; line-height: 1.6; }
+  .options { margin-top: 20px; padding-top: 20px; border-top: 1px solid var(--border); }
+  .options-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin-bottom: 12px; }
+  .checkbox-grid { display: flex; flex-direction: column; gap: 10px; }
+
+  .checkbox-item {
+    display: flex; align-items: center; gap: 10px; font-size: 14px; color: var(--text-secondary);
+    cursor: pointer; user-select: none;
+  }
+  .checkbox-item input[type="checkbox"] {
+    appearance: none; width: 18px; height: 18px; border-radius: 5px;
+    border: 1.5px solid var(--border-strong); background: var(--bg-elevated);
+    cursor: pointer; position: relative; flex-shrink: 0; transition: all 0.2s ease;
+  }
+  .checkbox-item input[type="checkbox"]:checked { background: var(--accent); border-color: var(--accent); }
+  .checkbox-item input[type="checkbox"]:checked::after {
+    content: ""; position: absolute; left: 5px; top: 2px; width: 4px; height: 8px;
+    border: solid #fff; border-width: 0 2px 2px 0; transform: rotate(45deg);
+  }
+
+  /* 自定义格式输入框 */
+  .input-group { display: flex; flex-direction: column; gap: 8px; margin-top: 16px; }
+  .input-group label { font-size: 13px; color: var(--text-secondary); }
+  .input-group input[type="text"] {
+    width: 100%; padding: 10px 14px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg-elevated);
+    color: var(--text-primary); font-family: var(--font); font-size: 14px;
+    outline: none; transition: border-color 0.2s, box-shadow 0.2s;
+  }
+  .input-group input[type="text"]:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+  .input-group input[type="text"]::placeholder { color: var(--text-muted); }
+
+  /* ===== 主按钮 ===== */
+  .btn-primary {
+    display: inline-flex; align-items: center; justify-content: center; gap: 8px;
+    width: 100%; margin-top: 24px; padding: 12px 24px; border: none;
+    border-radius: var(--radius-sm); background: var(--accent); color: #fff;
+    font-family: var(--font); font-size: 15px; font-weight: 600; letter-spacing: -0.01em;
+    cursor: pointer; transition: all 0.2s ease; box-shadow: 0 1px 2px rgba(217, 119, 87, 0.2);
+  }
+  .btn-primary:hover { background: var(--accent-hover); box-shadow: 0 2px 8px rgba(217, 119, 87, 0.3); }
+  .btn-primary:active { transform: scale(0.99); }
+  .btn-primary:disabled { background: var(--text-muted); cursor: not-allowed; box-shadow: none; opacity: 0.7; }
+
+  #status { margin-top: 14px; font-size: 13px; color: var(--accent); font-weight: 500; min-height: 20px; text-align: center; }
+
+  /* ===== 结果表格 ===== */
+  .stats-table {
+    width: 100%; border-collapse: separate; border-spacing: 0; font-size: 13px;
+    border-radius: var(--radius-sm); overflow: hidden; border: 1px solid var(--border);
+  }
+  .stats-table th, .stats-table td { padding: 10px 14px; text-align: left; border-bottom: 1px solid var(--border); }
+  .stats-table tr:last-child td { border-bottom: none; }
+  .stats-table th {
+    background: var(--bg-subtle); color: var(--text-secondary);
+    font-weight: 600; font-size: 12px; letter-spacing: 0.02em; text-transform: uppercase;
+  }
+  .stats-table td { color: var(--text-primary); font-variant-numeric: tabular-nums; }
+  .stats-table td:first-child { color: var(--text-secondary); font-weight: 500; }
+
+  /* ===== 预览区 ===== */
+  .preview {
+    background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 16px; max-height: 340px; overflow: auto; font-size: 13px; line-height: 1.7;
+    white-space: pre-wrap; word-break: break-all; color: var(--text-primary);
+  }
+  .preview::-webkit-scrollbar { width: 6px; }
+  .preview::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+  /* ===== 预览卡片头部（标题 + 下载按钮并排） ===== */
+  .preview-header {
+    display: flex; align-items: center; justify-content: space-between;
+    gap: 12px; margin-bottom: 16px; flex-wrap: wrap;
+  }
+  .preview-header h2 { margin-bottom: 0; }
+
+  /* ===== 下载链接 ===== */
+  .download-row {
+    display: flex; flex-wrap: wrap; gap: 10px;
+    justify-content: flex-end; align-items: center;
+    margin-left: auto;
+  }
+  .download-link {
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px;
+    border-radius: var(--radius-sm); border: 1px solid var(--border); background: var(--bg-subtle);
+    color: var(--text-primary); font-size: 12.5px; font-weight: 500; text-decoration: none;
+    cursor: pointer; transition: all 0.2s ease; white-space: nowrap;
+  }
+  .download-link:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
+
+  /* ===== 报告 ===== */
+  pre#report {
+    background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm);
+    padding: 16px; max-height: 480px; overflow: auto; font-size: 12.5px; line-height: 1.7;
+    white-space: pre-wrap; word-break: break-all; color: var(--text-secondary);
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+  }
+  pre#report::-webkit-scrollbar { width: 6px; }
+  pre#report::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+
+  @keyframes fadeUp {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  /* ===== 响应式 ===== */
+  @media (max-width: 640px) {
+    body { padding: 24px 16px 48px; }
+    .card { padding: 20px 16px; }
+    .file-row { flex-wrap: wrap; }
+    .file-row label { width: 100%; }
+    .file-input-wrap { width: 100%; }
+    .topbar { flex-direction: column; align-items: flex-start; }
+    .theme-toggle { align-self: flex-end; }
+    .preview-header { flex-direction: column; align-items: stretch; }
+    .download-row { justify-content: flex-start; margin-left: 0; }
+  }
+
+  [hidden] { display: none !important; }
+
+  /* ===== 新增：批量文件 ===== */
+  .dropzone {
+    position: relative; border: 1.5px dashed var(--border-strong); border-radius: var(--radius-sm);
+    padding: 26px 18px; text-align: center; background: var(--bg-subtle); cursor: pointer;
+    transition: border-color .2s ease, background-color .2s ease;
+  }
+  .dropzone:hover { border-color: var(--accent); }
+  .dropzone.over { border-color: var(--accent); background: var(--accent-light); }
+  .dropzone input[type="file"] { position: absolute; inset: 0; width: 100%; height: 100%; opacity: 0; cursor: pointer; }
+  .dropzone-title { font-size: 14px; font-weight: 600; color: var(--text-primary); margin: 0 0 6px; }
+  .dropzone .hint { margin: 0; }
+
+  .file-list { margin-top: 14px; display: flex; flex-direction: column; gap: 8px; }
+  .file-item {
+    display: flex; align-items: center; gap: 10px; padding: 9px 12px;
+    border: 1px solid var(--border); border-radius: var(--radius-sm);
+    background: var(--bg-elevated); font-size: 13px;
+  }
+  .file-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
+  .file-item .meta { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .file-item .remove {
+    flex-shrink: 0; border: none; background: none; color: var(--text-muted);
+    cursor: pointer; font-size: 12px; padding: 3px 8px; border-radius: 6px;
+    transition: color .15s ease, background-color .15s ease;
+  }
+  .file-item .remove:hover { color: var(--error); background: var(--bg-hover); }
+
+  /* ===== 新增：分段控件 / 字段 / 标签 ===== */
+  .segmented { display: inline-flex; gap: 2px; padding: 3px; background: var(--bg-subtle); border: 1px solid var(--border); border-radius: 999px; }
+  .segmented button {
+    border: none; background: none; padding: 7px 16px; border-radius: 999px;
+    font-family: var(--font); font-size: 13px; font-weight: 500; color: var(--text-secondary);
+    cursor: pointer; transition: all .18s ease;
+  }
+  .segmented button:hover { color: var(--text-primary); }
+  .segmented button.active { background: var(--bg-elevated); color: var(--text-primary); box-shadow: var(--shadow); }
+
+  .field { margin-top: 16px; }
+  .field > label { display: block; font-size: 13px; color: var(--text-secondary); margin-bottom: 6px; }
   .field input[type="text"], .field input[type="number"], .field select {
-    width: 100%; padding: 8px 10px; border-radius: 8px; border: 1px solid var(--line);
-    font: inherit; font-size: 13px; background: #fff; color: var(--ink); outline: none;
+    width: 100%; padding: 10px 14px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary);
+    font-family: var(--font); font-size: 14px; outline: none;
+    transition: border-color .2s, box-shadow .2s;
   }
-  .field input:focus, .field select:focus { border-color: var(--accent); }
-  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
-  .check { display: flex; align-items: center; gap: 8px; font-size: 13px; color: var(--muted); margin-top: 12px; }
-  .chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+  .field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip {
-    display: inline-flex; align-items: center; gap: 6px; padding: 5px 10px; border-radius: 999px;
-    border: 1px solid var(--line); font-size: 12px; font-family: var(--mono); background: #fff; cursor: pointer;
+    display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px;
+    border: 1px solid var(--border); border-radius: 999px; background: var(--bg-elevated);
+    font-size: 12.5px; color: var(--text-secondary); cursor: pointer;
+    transition: border-color .18s ease, color .18s ease, background-color .18s ease;
   }
-  .chip:has(input:checked) { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); }
-  .chip input { accent-color: var(--accent); }
-  #stats { display: flex; flex-wrap: wrap; gap: 16px; font-size: 13px; color: var(--muted); margin-bottom: 14px; }
-  #stats b { color: var(--ink); font-variant-numeric: tabular-nums; }
-  #stats > span:not(:last-child)::after { content: '·'; margin: 0 10px; color: #cfc9ba; }
-  #stats .ok { color: var(--ok); }
-  #stats .bad { color: var(--bad); }
-  #preview {
-    margin: 0; padding: 16px; border-radius: 10px; background: #fdfcfa; border: 1px solid var(--line);
-    white-space: pre-wrap; word-break: break-word; max-height: 460px; overflow: auto;
-    font-family: var(--mono); font-size: 12.5px; line-height: 1.8;
-  }
-  #status { margin: 12px 0 0; font-size: 13px; min-height: 20px; color: var(--muted); }
-  #status.ok { color: var(--ok); }
-  #status.warn { color: var(--warn); }
-  #status.bad { color: var(--bad); }
-  .actions { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
-  footer { max-width: 1180px; margin: 0 auto; padding: 0 22px 40px; color: var(--muted); font-size: 12.5px; }
-  footer code { font-family: var(--mono); background: #f3f0e9; padding: 1px 5px; border-radius: 4px; }
-  .note { margin-top: 10px; padding: 10px 12px; border-left: 3px solid var(--line); color: var(--muted); font-size: 12.5px; }
+  .chip input { margin: 0; accent-color: var(--accent); }
+  .chip:has(input:checked) { border-color: var(--accent); color: var(--accent); background: var(--accent-light); }
+
+  .section-sub { font-size: 13px; font-weight: 600; color: var(--text-primary); margin: 18px 0 8px; }
+  .row-actions { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 18px; }
+  .row-actions .btn-primary { width: auto; margin-top: 0; padding: 11px 22px; }
+  .empty { color: var(--text-muted); font-size: 13px; text-align: center; padding: 10px 0; }
+
 </style>
 </head>
 <body>
-<header>
-  <h1>fin-doc-pipeline · 文本排版工作台</h1>
-  <p>零依赖的文本处理流水线，全部在浏览器本地运行，文件不会上传到任何服务器。</p>
-  <div class="links">
-    <a href="https://github.com/0xFin/fin-doc-pipeline">GitHub</a>
-    <a href="https://www.npmjs.com/package/fin-doc-pipeline">npm</a>
-    <a href="https://github.com/0xFin/fin-doc-pipeline#readme">文档</a>
+<div class="topbar">
+  <div class="brand">
+    <div class="brand-mark">T</div>
+    <h1>TXT 文本合并与排版工具</h1>
   </div>
-</header>
+  <button class="theme-toggle" id="themeToggle" aria-label="切换明暗主题">
+    <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <circle cx="12" cy="12" r="5"></circle>
+      <line x1="12" y1="1" x2="12" y2="3"></line>
+      <line x1="12" y1="21" x2="12" y2="23"></line>
+      <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+      <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+      <line x1="1" y1="12" x2="3" y2="12"></line>
+      <line x1="21" y1="12" x2="23" y2="12"></line>
+      <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+      <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+    </svg>
+    <svg class="moon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+      <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+    </svg>
+    <span id="themeLabel">Light</span>
+  </button>
+</div>
 
-<main>
-  <section class="panel">
-    <h2>1 · 输入</h2>
-    <div class="drop" id="drop">
-      <p>把文件拖到这里，或</p>
-      <button id="pick">选择文件</button>
-      <input type="file" id="fileInput" multiple hidden
-             accept=".txt,.text,.md,.markdown,.html,.htm,.xhtml,.rtf,.json,.jsonl,.yaml,.yml,.xml,.csv,.tsv,.js,.mjs,.cjs,.ts,.rst,.ini,.conf,.log,.srt,.tex,.org">
-    </div>
-    <div id="fileList" style="margin-top: 12px;"></div>
+<div class="card">
+  <h2>输入文本</h2>
+  <div class="dropzone" id="dropzone">
+    <input type="file" id="fileInput" multiple
+           accept=".txt,.text,.md,.markdown,.html,.htm,.xhtml,.rtf,.json,.jsonl,.yaml,.yml,.xml,.csv,.tsv,.js,.mjs,.cjs,.ts,.rst,.ini,.conf,.log,.srt,.tex,.org">
+    <p class="dropzone-title">拖拽文本到这里，或点击选择</p>
+    <p class="hint">可一次选择多个文件；编码自动识别（UTF-8 / UTF-16 / GBK / GB18030 / Big5）</p>
+  </div>
+  <div class="file-list" id="fileList"></div>
 
+  <div class="section-sub">处理方式</div>
+  <div class="segmented" id="modeSwitch">
+    <button type="button" data-mode="merge" class="active">合并为一个成品</button>
+    <button type="button" data-mode="separate">每个文件分别处理</button>
+  </div>
+
+  <div id="mergeOptions">
     <div class="field">
-      <label for="paste">或直接粘贴文本</label>
-      <textarea id="paste" placeholder="粘贴任意中文/英文文本，会自动识别编码与章节结构……"></textarea>
-    </div>
-
-    <h2 style="margin-top: 22px;">2 · 排版</h2>
-    <div class="grid2">
-      <div class="field">
-        <label for="preset">预设</label>
-        <select id="preset">
-          <option value="novel">novel · 小说</option>
-          <option value="plain">plain · 纯文本</option>
-          <option value="article">article · 文章</option>
-        </select>
-      </div>
-      <div class="field">
-        <label for="mergeMode">多文件合并</label>
-        <select id="mergeMode">
-          <option value="versions">versions · 同书择优</option>
-          <option value="concat">concat · 顺序拼接</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="field">
-      <label for="titleTemplate">章节标题模板（{num} 章号，{title} 副标题）</label>
-      <input type="text" id="titleTemplate" value="[第 {num} 章]">
-    </div>
-
-    <div class="grid2">
-      <div class="field">
-        <label for="numWidth">章号位数</label>
-        <input type="number" id="numWidth" value="3" min="1" max="6">
-      </div>
-      <div class="field">
-        <label for="separator">标题与副标题间隔</label>
-        <select id="separator">
-          <option value="　" selected>全角空格（　）</option>
-          <option value=" ">半角空格（ ）</option>
-          <option value="">无间隔</option>
-        </select>
-      </div>
-    </div>
-
-    <div class="field">
-      <label for="mdHeading">Markdown 标题层级</label>
-      <select id="mdHeading">
-        <option value="auto">auto · 章 ## / 节 ###</option>
-        <option value="none">none · 不加标记</option>
-        <option value="preserve">preserve · 还原源层级</option>
-        <option value="level:2">level:2 · 全部 ##</option>
+      <label for="mergeStrategy">合并策略</label>
+      <select id="mergeStrategy">
+        <option value="versions">versions · 同一本书的不同版本，逐章择优</option>
+        <option value="concat">concat · 不同的书，按顺序拼接</option>
       </select>
     </div>
+  </div>
+</div>
 
-    <label class="check"><input type="checkbox" id="indent" checked> 段首缩进（两个全角空格）</label>
+<div class="card">
+  <h2>排版选项</h2>
+  <div class="field">
+    <label for="titleTemplate">自定义章节标题格式</label>
+    <input type="text" id="titleTemplate" value="## [第 {num} 章]　{title}">
+    <p class="hint">
+      占位符：{num} 章号 · {title} 副标题 · {prefix} 番外等分组 · {unit} 章/回/节 · {raw} 原始标题行。
+      txt / md 输出会自动在最前面加 <code>## </code>；docx / PDF / EPUB 使用真正的标题样式。
+    </p>
+  </div>
 
-    <h2 style="margin-top: 22px;">3 · 导出</h2>
-    <div class="chips" id="formats"></div>
-    <div class="actions">
-      <button class="primary" id="export">导出所选格式</button>
-      <button id="report">下载合并报告</button>
-      <button id="clear">清空</button>
+  <div class="grid2">
+    <div class="field">
+      <label for="numWidth">章号位数</label>
+      <input type="number" id="numWidth" value="3" min="1" max="6">
     </div>
-  </section>
-
-  <section class="panel">
-    <h2>预览</h2>
-    <div id="stats"></div>
-    <pre id="preview"></pre>
-    <div id="status"></div>
-    <div class="note">
-      浏览器版在本地完成全部计算：编码探测、章节识别、去重合并、排版与导出。
-      DOCX / EPUB / PDF <b>输入</b>需要解压，浏览器端不提供，请用命令行（<code>npm i -g fin-doc-pipeline</code>）。
+    <div class="field">
+      <label for="sectionTitle">小节标题格式</label>
+      <input type="text" id="sectionTitle" value="{title}">
     </div>
-  </section>
-</main>
+  </div>
 
-<footer>
-  支持输出：<span id="supported"></span>。命令行版功能更完整，见
-  <a href="https://github.com/0xFin/fin-doc-pipeline">README</a>。
-</footer>
+  <div class="options" style="margin-top: 18px;">
+    <div class="checkbox-grid">
+      <label class="checkbox-item">
+        <input type="checkbox" id="optClean" checked>
+        清理乱码 / 控制字符 / 零宽字符
+      </label>
+      <label class="checkbox-item">
+        <input type="checkbox" id="optIndent" checked>
+        段落首行缩进（全角两字）
+      </label>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <h2>输出格式</h2>
+  <div class="chips" id="formats"></div>
+  <div class="row-actions">
+    <button class="btn-primary" id="btnProcess">开始处理</button>
+  </div>
+  <div id="status"></div>
+</div>
+
+<div class="card" id="previewBox" hidden>
+  <div class="preview-header">
+    <h2>结果预览（前 2000 字）</h2>
+    <div class="download-row" id="downloadRow"></div>
+  </div>
+  <div class="preview" id="preview"></div>
+</div>
+
+<div class="card" id="statsBox" hidden>
+  <h2>处理统计</h2>
+  <div id="stats"></div>
+</div>
+
+<div class="card" id="reportBox" hidden>
+  <h2>处理报告</h2>
+  <pre id="report"></pre>
+</div>
 
 <script type="module">
-  import { installBuffer } from './web/buffer.mjs';
-  installBuffer();
-  const { start } = await import('./web/app.mjs');
-  start();
+import { installBuffer } from './web/buffer.mjs';
+installBuffer();
+
+const { detectEncoding } = await import('./src/encoding.mjs');
+const { parseDocument, documentStats } = await import('./src/parser.mjs');
+const { mergeDocuments, renderMergeReport } = await import('./src/merge.mjs');
+const { lintDocument } = await import('./src/lint.mjs');
+const { renderDocument, DEFAULT_FORMAT } = await import('./src/typography.mjs');
+const { renderFormat } = await import('./src/converters.mjs');
+
+const FORMATS = ['txt', 'md', 'html', 'json', 'yaml', 'xml', 'csv', 'js', 'rtf', 'docx', 'epub', 'pdf'];
+const DEFAULT_SELECTED = ['txt'];
+const FW = '\u3000';
+
+const state = {
+  files: [],
+  mode: 'merge',
+  strategy: 'versions',
+  result: null,
+};
+
+const $ = (id) => document.getElementById(id);
+const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
+const stemOf = (name) => String(name).replace(/\.[^.]+$/, '');
+const bytesText = (n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
+
+/* ---------- 主题 ---------- */
+(function initTheme() {
+  const html = document.documentElement;
+  const toggle = $('themeToggle');
+  const label = $('themeLabel');
+  const saved = localStorage.getItem('claude-tool-theme');
+  if (saved === 'dark') { html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark'; }
+  else if (saved === 'light') { html.removeAttribute('data-theme'); label.textContent = 'Light'; }
+  else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+    html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark';
+  }
+  toggle.addEventListener('click', () => {
+    const dark = html.hasAttribute('data-theme');
+    if (dark) { html.removeAttribute('data-theme'); label.textContent = 'Light'; localStorage.setItem('claude-tool-theme', 'light'); }
+    else { html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark'; localStorage.setItem('claude-tool-theme', 'dark'); }
+  });
+})();
+
+/* ---------- 状态提示 ---------- */
+function setStatus(text, kind) {
+  const node = $('status');
+  node.textContent = text;
+  node.style.color = kind === 'error' ? 'var(--error)' : kind === 'ok' ? 'var(--success)' : 'var(--accent)';
+}
+
+/* ---------- 文件 ---------- */
+const UNSUPPORTED = /\.(docx|doc|epub|pdf|odt)$/i;
+
+async function addFiles(list) {
+  const incoming = Array.from(list || []);
+  if (!incoming.length) return;
+
+  const accepted = [];
+  const rejected = [];
+  for (const file of incoming) {
+    if (UNSUPPORTED.test(file.name)) { rejected.push(file.name); continue; }
+    accepted.push(file);
+  }
+
+  for (const file of accepted) {
+    const buffer = new Uint8Array(await file.arrayBuffer());
+    state.files.push({ name: file.name, size: buffer.length, bytes: buffer });
+  }
+  renderFiles();
+
+  if (accepted.length) setStatus('已添加 ' + accepted.length + ' 个文件，共 ' + state.files.length + ' 个', 'ok');
+  if (rejected.length) {
+    setStatus('已跳过 ' + rejected.join('、') + '：浏览器版不解压容器格式，请用命令行处理。', 'error');
+  }
+}
+
+function renderFiles() {
+  const box = $('fileList');
+  if (!state.files.length) {
+    box.innerHTML = '<p class="empty">还没有文件。选择或拖入文本后开始。</p>';
+    return;
+  }
+  box.innerHTML = state.files.map((file, index) => (
+    '<div class="file-item">' +
+      '<span class="name">' + esc(file.name) + '</span>' +
+      '<span class="meta">' + bytesText(file.size) + '</span>' +
+      '<button type="button" class="remove" data-index="' + index + '">移除</button>' +
+    '</div>'
+  )).join('');
+  box.querySelectorAll('.remove').forEach((button) => {
+    button.addEventListener('click', () => {
+      state.files.splice(Number(button.dataset.index), 1);
+      renderFiles();
+    });
+  });
+}
+
+/* ---------- 选项 ---------- */
+function readFormatOptions() {
+  const rawTemplate = ($('titleTemplate').value || '').replace(/^#{1,6}\s+/, '').trim();
+  return {
+    ...DEFAULT_FORMAT,
+    chapterTitle: rawTemplate || '[第 {num} 章]' + FW + '{title}',
+    sectionTitle: $('sectionTitle').value || '{title}',
+    numWidth: Number($('numWidth').value) || 3,
+    indent: $('optIndent').checked ? FW + FW : '',
+    stripInvisible: $('optClean').checked,
+    mdHeading: 'auto',
+  };
+}
+
+function structureOptions() {
+  return { markdown: { titleLevels: [1], chapterLevels: [2], sectionLevels: [3] } };
+}
+
+function selectedFormats() {
+  return Array.from(document.querySelectorAll('input[name="fmt"]:checked')).map((input) => input.value);
+}
+
+/* ---------- 处理 ---------- */
+function decodeFiles() {
+  for (const file of state.files) {
+    const detected = detectEncoding(file.bytes);
+    file.text = detected.text;
+    file.encoding = detected.label;
+  }
+}
+
+function buildEntries() {
+  decodeFiles();
+  const structure = structureOptions();
+
+  if (state.mode === 'separate') {
+    return state.files.map((file) => ({
+      stem: stemOf(file.name),
+      doc: parseDocument(file.text, structure),
+      encoding: file.encoding,
+      sourceText: file.text,
+      report: '',
+    }));
+  }
+
+  const docs = state.files.map((file) => ({
+    label: file.name,
+    path: file.name,
+    encoding: file.encoding,
+    doc: parseDocument(file.text, structure),
+  }));
+  const merged = mergeDocuments(docs, { mode: state.strategy });
+  return [{
+    stem: state.files.length > 1 ? '合并结果' : stemOf(state.files[0].name),
+    doc: merged.doc,
+    encoding: state.files.map((f) => f.encoding).join(' / '),
+    sourceText: state.files.map((f) => f.text).join(''),
+    report: state.files.length > 1 ? renderMergeReport(merged.report) : '',
+  }];
+}
+
+function formatFor(format, base) {
+  if (format === 'txt') return { ...base, headingPrefix: '## ', sectionPrefix: '### ' };
+  return base;
+}
+
+function renderEntry(entry, format, base) {
+  return renderFormat(entry.doc, format, { format: formatFor(format, base), meta: { title: entry.stem } });
+}
+
+function download(name, buffer, binary) {
+  const blob = new Blob([buffer], { type: binary ? 'application/octet-stream' : 'text/plain;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = name;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 5000);
+}
+
+function processFiles() {
+  if (!state.files.length) { setStatus('请先选择或拖入文本文件', 'error'); return; }
+  const formats = selectedFormats();
+  if (!formats.length) { setStatus('请至少选择一种输出格式', 'error'); return; }
+
+  setStatus('正在处理……', '');
+  try {
+    const entries = buildEntries();
+    const base = readFormatOptions();
+    state.result = { entries, formats, base };
+
+    const previewSource = renderEntry(entries[0], 'txt', base).buffer.toString('utf8');
+    $('preview').textContent = previewSource.slice(0, 2000) + (previewSource.length > 2000 ? '\n\n……（已截断）' : '');
+    $('previewBox').hidden = false;
+
+    renderDownloads(entries, formats, base);
+    renderStats(entries, formats, base);
+    renderReport(entries);
+    setStatus('处理完成：' + entries.length + ' 个成品 × ' + formats.length + ' 种格式', 'ok');
+  } catch (error) {
+    console.error(error);
+    setStatus('出错了：' + error.message, 'error');
+  }
+}
+
+function renderDownloads(entries, formats, base) {
+  const row = $('downloadRow');
+  row.innerHTML = '';
+  for (const entry of entries) {
+    for (const format of formats) {
+      const rendered = renderEntry(entry, format, base);
+      const link = document.createElement('a');
+      link.href = '#';
+      link.className = 'download-link';
+      link.textContent = '⬇ ' + entry.stem + '.' + rendered.extension;
+      link.addEventListener('click', (event) => {
+        event.preventDefault();
+        download(entry.stem + '.' + rendered.extension, rendered.buffer, rendered.binary);
+      });
+      row.appendChild(link);
+    }
+  }
+}
+
+function renderStats(entries, formats, base) {
+  const rows = [['', ...entries.map((entry) => entry.stem)]];
+  const statsList = entries.map((entry) => documentStats(entry.doc.frontMatter || [], entry.doc.chapters || []));
+  const lintList = entries.map((entry) => lintDocument(entry.doc, { level: 'error' }).counts);
+
+  rows.push(['编码', ...entries.map((entry) => entry.encoding || '—')]);
+  rows.push(['章节', ...statsList.map((s) => s.chapterBlocks || 0)]);
+  rows.push(['小节', ...statsList.map((s) => s.sectionCount || 0)]);
+  rows.push(['汉字数', ...statsList.map((s) => (s.chars || 0))]);
+  rows.push(['段落数', ...statsList.map((s) => s.paragraphs || 0)]);
+  rows.push(['错误数', ...lintList.map((c) => c.error)]);
+  rows.push(['警告数', ...lintList.map((c) => c.warn)]);
+
+  let html = '<table class="stats-table">';
+  rows.forEach((row, i) => {
+    html += '<tr>';
+    row.forEach((cell, j) => {
+      const tag = (i === 0 || j === 0) ? 'th' : 'td';
+      html += '<' + tag + '>' + esc(cell) + '</' + tag + '>';
+    });
+    html += '</tr>';
+  });
+  html += '</table>';
+  $('stats').innerHTML = html;
+  $('statsBox').hidden = false;
+}
+
+function renderReport(entries) {
+  const withReport = entries.filter((entry) => entry.report);
+  if (!withReport.length) { $('reportBox').hidden = true; return; }
+  $('report').textContent = withReport.map((entry) => entry.report).join('\n\n');
+  $('reportBox').hidden = false;
+}
+
+/* ---------- 绑定 ---------- */
+(function bindFormats() {
+  $('formats').innerHTML = FORMATS.map((format) => {
+    const checked = DEFAULT_SELECTED.includes(format) ? ' checked' : '';
+    return '<label class="chip"><input type="checkbox" name="fmt" value="' + format + '"' + checked + '> ' + format + '</label>';
+  }).join('');
+})();
+
+(function bindMode() {
+  $('modeSwitch').addEventListener('click', (event) => {
+    const button = event.target.closest('button[data-mode]');
+    if (!button) return;
+    state.mode = button.dataset.mode;
+    $('modeSwitch').querySelectorAll('button').forEach((item) => item.classList.toggle('active', item === button));
+    $('mergeOptions').hidden = state.mode !== 'merge';
+  });
+})();
+
+(function bindFiles() {
+  const dropzone = $('dropzone');
+  const input = $('fileInput');
+  input.addEventListener('change', () => { addFiles(input.files); input.value = ''; });
+  ['dragenter', 'dragover'].forEach((type) => dropzone.addEventListener(type, (event) => {
+    event.preventDefault(); dropzone.classList.add('over');
+  }));
+  ['dragleave', 'drop'].forEach((type) => dropzone.addEventListener(type, (event) => {
+    event.preventDefault(); dropzone.classList.remove('over');
+  }));
+  dropzone.addEventListener('drop', (event) => addFiles(event.dataTransfer.files));
+})();
+
+$('mergeStrategy').addEventListener('change', () => { state.strategy = $('mergeStrategy').value; });
+$('btnProcess').addEventListener('click', processFiles);
+
+renderFiles();
+setStatus('准备就绪：选择或拖入文本后点击「开始处理」', '');
 </script>
 </body>
 </html>

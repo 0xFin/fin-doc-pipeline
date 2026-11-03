@@ -828,6 +828,12 @@ group('heading customisation', () => {
     assert.equal(renderTitle(first.sections[0], { sectionTitle: '【{title}】' }), '【第一节】');
   });
 
+  test('section prefix can differ from the chapter prefix', () => {
+    const out = renderDocument(doc, { headingPrefix: '## ', sectionPrefix: '### ' });
+    assert.ok(out.includes('## [第001章]'));
+    assert.ok(out.includes('### 第一节'));
+  });
+
   test('markdown markers follow the configured mode', () => {
     assert.equal(markdownMarker(doc.chapters[0], {}), '##');
     assert.equal(markdownMarker(doc.chapters[0].sections[0], {}), '###');

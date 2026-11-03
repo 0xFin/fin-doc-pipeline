@@ -11,6 +11,7 @@
   "engines": { "node": ">=18" },
   "scripts": {
     "test": "node test/run.mjs",
+    "ship": "sh scripts/ship.sh",
     "prepublishOnly": "node test/run.mjs",
     "check": "node --check src/cli.mjs"
   },

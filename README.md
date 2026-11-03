@@ -111,6 +111,31 @@ fin-doc-pipeline install-skill --link       # 软链接，改代码立即生效
 
 要求 Node.js 18+，**没有任何第三方依赖**，不需要 `npm install`。
 
+## 改完代码怎么同步
+
+技能目录里是**拷贝**，不是软链，所以改完 `src/` 后必须重新安装一次，否则 Agent 跑的还是旧代码。一条命令搞定测试、同步、提交、推送：
+
+`@sh
+./scripts/ship.sh                       # 自动提交信息
+./scripts/ship.sh "fix: 章节排序"        # 自定义提交信息
+./scripts/ship.sh --no-push             # 只提交，不推送
+`@
+
+它依次执行：
+
+1. `node test/run.mjs` —— 测试不通过就停下，不会同步半成品
+2. `./install.sh` —— 拷贝到 `~/.dsh/skills/fin-doc-pipeline`
+3. `git commit` —— 有改动才提交
+4. `git push origin HEAD` —— 推到 GitHub
+
+如果不想每次手动同步，用软链模式安装一次即可：
+
+`@sh
+./install.sh --link
+`@
+
+之后仓库里的改动会立刻被技能读到（但**仍需** `ship.sh` 或手动 `git push` 让 GitHub 同步）。
+
 ## 快速开始
 
 ### 1. 先体检

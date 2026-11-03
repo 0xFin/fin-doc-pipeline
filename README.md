@@ -27,7 +27,11 @@ fin-doc-pipeline convert 全书.txt --to epub,docx,pdf      # 导出成品
 
 ## Web 版
 
-Web 版完全在浏览器本地运行，没有后端、不上传文件：
+Web 版完全在浏览器本地运行，没有后端、不上传文件。
+
+**macOS 最省事**：双击仓库根目录的 `start.command`，它会自动起服务并打开浏览器；关闭终端窗口即停止。
+
+也可以手动启动：
 
 ```sh
 git clone https://github.com/0xFin/fin-doc-pipeline.git
@@ -37,7 +41,8 @@ python3 -m http.server 8000   # 或 npx serve .
 
 然后打开 <http://localhost:8000/>。可以拖入或粘贴文本、实时预览，并导出全部 12 种格式。
 
-> 直接双击 `index.html` 不行：浏览器会拦截 `file://` 下的 ES 模块加载，必须用一个静态服务器。
+> **直接双击 `index.html` 不行**：浏览器会拦截 `file://` 下的 ES 模块加载（控制台报 CORS 错误），
+> 所有处理按钮都不会响应——明暗主题除外，页面会检测到这种情况并显示提示。必须走本地服务。
 > 托管版本（GitHub Pages）的部署工作流已随仓库提供，账号权限恢复后会自动上线。
 ## 目录
 

@@ -200,6 +200,20 @@
   .preview-header h2 { margin-bottom: 0; }
   .preview-meta { font-size: 12.5px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 
+  .notice {
+    margin-bottom: 18px; padding: 16px 18px; border-radius: var(--radius-sm);
+    border: 1px solid var(--accent); background: var(--accent-light);
+    color: var(--text-primary); font-size: 13.5px; line-height: 1.7;
+  }
+  .notice strong { display: block; margin-bottom: 6px; font-size: 14px; }
+  .notice p { margin: 0; }
+  .notice pre {
+    margin: 8px 0; padding: 8px 10px; border-radius: 6px;
+    background: var(--bg-elevated); border: 1px solid var(--border);
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12.5px;
+  }
+  .notice code { font-family: "JetBrains Mono", ui-monospace, monospace; }
+
   /* ===== 下载链接 ===== */
   .download-row {
     display: flex; flex-wrap: wrap; gap: 10px;
@@ -372,6 +386,13 @@
   </button>
 </div>
 
+<div class="notice" id="fileNotice" hidden>
+  <strong>需要本地服务才能处理文档</strong>
+  <p>直接双击打开时，浏览器会阻止 ES 模块加载，所以页面上的按钮没有反应。请双击仓库根目录的 <code>start.command</code>，或手动运行：</p>
+  <pre>python3 -m http.server 8000</pre>
+  <p>然后访问 <code>http://localhost:8000/</code>。</p>
+</div>
+
 <div class="card">
   <h2>输入文本</h2>
   <div class="dropzone" id="dropzone">
@@ -457,6 +478,36 @@
   <pre id="report"></pre>
 </div>
 
+<script>
+  /* Theme must keep working when the module bundle cannot load (file://). */
+  (function initTheme() {
+    const html = document.documentElement;
+    const toggle = document.getElementById('themeToggle');
+    const label = document.getElementById('themeLabel');
+    const read = () => { try { return localStorage.getItem('claude-tool-theme'); } catch (error) { return null; } };
+    const write = (value) => { try { localStorage.setItem('claude-tool-theme', value); } catch (error) { /* private mode */ } };
+
+    const saved = read();
+    if (saved === 'dark') { html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark'; }
+    else if (saved === 'light') { html.removeAttribute('data-theme'); label.textContent = 'Light'; }
+    else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark';
+    }
+
+    toggle.addEventListener('click', () => {
+      if (html.hasAttribute('data-theme')) {
+        html.removeAttribute('data-theme'); label.textContent = 'Light'; write('light');
+      } else {
+        html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark'; write('dark');
+      }
+    });
+  })();
+
+  if (location.protocol === 'file:') {
+    document.getElementById('fileNotice').hidden = false;
+  }
+</script>
+
 <script type="module">
 import { installBuffer } from './web/buffer.mjs';
 installBuffer();
@@ -485,22 +536,7 @@ const stemOf = (name) => String(name).replace(/\.[^.]+$/, '');
 const bytesText = (n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
 
 /* ---------- 主题 ---------- */
-(function initTheme() {
-  const html = document.documentElement;
-  const toggle = $('themeToggle');
-  const label = $('themeLabel');
-  const saved = localStorage.getItem('claude-tool-theme');
-  if (saved === 'dark') { html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark'; }
-  else if (saved === 'light') { html.removeAttribute('data-theme'); label.textContent = 'Light'; }
-  else if (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches) {
-    html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark';
-  }
-  toggle.addEventListener('click', () => {
-    const dark = html.hasAttribute('data-theme');
-    if (dark) { html.removeAttribute('data-theme'); label.textContent = 'Light'; localStorage.setItem('claude-tool-theme', 'light'); }
-    else { html.setAttribute('data-theme', 'dark'); label.textContent = 'Dark'; localStorage.setItem('claude-tool-theme', 'dark'); }
-  });
-})();
+/* theme lives in the classic script above so it survives a module failure */
 
 /* ---------- 状态提示 ---------- */
 function setStatus(text, kind) {

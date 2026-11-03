@@ -2,6 +2,10 @@
 
 ## Unreleased
 
+- `start.command`: double-click launcher that serves the folder and opens the
+  browser; the page now explains the `file://` module restriction instead of
+  silently ignoring clicks, and the theme toggle runs outside the module
+
 - Fix the merge ordering: a single source is passed through untouched, and
   multi-file merges follow the most complete source instead of stacking every
   special chapter first, then volumes, then chapters (`全文完` no longer jumps to

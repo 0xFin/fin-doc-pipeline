@@ -12,7 +12,15 @@ problems=0
 
 echo "仓库    $(pwd)"
 echo "分支    $(git rev-parse --abbrev-ref HEAD) @ $(git rev-parse --short HEAD)"
-echo "标签    $(git tag --sort=-creatordate | head -1)"
+latest_tag=$(git tag --sort=-creatordate | head -1)
+version=$(node -p "require('./package.json').version" 2>/dev/null || sed -n 's/^ *"version": *"\([^"]*\)".*/\1/p' package.json)
+echo "标签    ${latest_tag:-无}"
+if [ -n "$version" ] && [ "$latest_tag" = "v$version" ]; then
+  echo "版本    $version（标签一致）"
+else
+  echo "版本    ${version:-未知}，最新标签 ${latest_tag:-无}"
+  problems=1
+fi
 
 dirty=$(git status --porcelain | wc -l | tr -d ' ')
 if [ "$dirty" -eq 0 ]; then

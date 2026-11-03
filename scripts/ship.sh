@@ -48,3 +48,13 @@ fi
 echo "== 5/5 推送到 GitHub =="
 GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=20' git push origin HEAD
 echo "  已推送 $(git log --oneline -1)"
+
+tag="v$(node -p "require('./package.json').version")"
+if git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+  echo "  标签 $tag 已存在"
+else
+  git tag "$tag"
+  echo "  已创建标签 $tag"
+fi
+GIT_SSH_COMMAND='ssh -o BatchMode=yes -o ConnectTimeout=20' git push origin "$tag" >/dev/null
+echo "  标签 $tag 已推送"

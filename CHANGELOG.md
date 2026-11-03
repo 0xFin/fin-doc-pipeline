@@ -10,6 +10,9 @@
 - `sectionPrefix` option: text output can mark sections differently from chapters
 - Browser build refuses DOCX/EPUB/PDF input with a clear message instead of
   producing garbage
+- Layout pass: title is now 「文本文档处理器」, larger headings, mode + strategy
+  side by side, three formatting fields in a row, placeholder legend, and the
+  redundant clean/indent checkboxes removed
 
 ## 0.3.1
 

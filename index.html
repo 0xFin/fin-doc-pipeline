@@ -3,7 +3,8 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TXT 文本合并与排版工具</title>
+<title>文本文档处理器</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%23d97757'/%3E%3Ctext x='16' y='23' font-family='system-ui' font-size='18' font-weight='700' fill='white' text-anchor='middle'%3ET%3C/text%3E%3C/svg%3E">
 <style>
 /* ===== Claude 暖色主题变量 ===== */
   :root {
@@ -78,7 +79,7 @@
     background: var(--accent); display: flex; align-items: center; justify-content: center;
     color: #fff; font-weight: 700; font-size: 14px; flex-shrink: 0;
   }
-  .brand h1 { font-size: 18px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
+  .brand h1 { font-size: 20px; font-weight: 600; letter-spacing: -0.02em; color: var(--text-primary); }
 
   .theme-toggle {
     display: flex; align-items: center; gap: 8px; padding: 8px 14px;
@@ -99,7 +100,7 @@
     box-shadow: var(--shadow); transition: background-color 0.3s ease, border-color 0.3s ease;
     animation: fadeUp 0.35s ease both;
   }
-  .card h2 { font-size: 15px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 16px; color: var(--text-primary); }
+  .card h2 { font-size: 17px; font-weight: 600; letter-spacing: -0.01em; margin-bottom: 16px; color: var(--text-primary); }
 
   /* ===== 文本选择 ===== */
   .file-row {
@@ -289,7 +290,38 @@
   }
   .field input:focus, .field select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
   .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+  .grid3 { display: grid; grid-template-columns: 2fr 1fr 1.4fr; gap: 14px; align-items: end; }
+  .grid3 .field { margin-top: 0; }
+  @media (max-width: 760px) { .grid3 { grid-template-columns: 1fr; } }
   @media (max-width: 640px) { .grid2 { grid-template-columns: 1fr; } }
+
+  .inline-row { display: flex; align-items: flex-end; flex-wrap: wrap; gap: 16px; margin-top: 20px; }
+  .inline-item { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+  .inline-item > label, .inline-item > .inline-label { font-size: 13px; color: var(--text-secondary); }
+  .inline-item.grow { flex: 1 1 280px; }
+  .inline-item select {
+    width: 100%; padding: 10px 14px; border-radius: var(--radius-sm);
+    border: 1px solid var(--border); background: var(--bg-elevated); color: var(--text-primary);
+    font-family: var(--font); font-size: 14px; outline: none;
+    transition: border-color .2s, box-shadow .2s;
+  }
+  .inline-item select:focus { border-color: var(--accent); box-shadow: 0 0 0 2px var(--accent-light); }
+
+  .tokens {
+    display: flex; flex-wrap: wrap; gap: 10px 22px;
+    margin-top: 20px; padding-top: 16px; border-top: 1px solid var(--border);
+  }
+  .token { display: inline-flex; align-items: baseline; gap: 8px; font-size: 12.5px; color: var(--text-secondary); }
+  .token code {
+    font-family: "JetBrains Mono", ui-monospace, monospace; font-size: 12px;
+    color: var(--accent); background: var(--accent-light); padding: 2px 7px; border-radius: 6px;
+  }
+  .token em { font-style: normal; }
+  .note-line { margin: 12px 0 0; font-size: 12.5px; line-height: 1.7; color: var(--text-muted); }
+  .note-line code {
+    font-family: "JetBrains Mono", ui-monospace, monospace;
+    color: var(--text-secondary); background: var(--bg-subtle); padding: 1px 6px; border-radius: 5px;
+  }
 
   .chips { display: flex; flex-wrap: wrap; gap: 8px; }
   .chip {
@@ -312,7 +344,7 @@
 <div class="topbar">
   <div class="brand">
     <div class="brand-mark">T</div>
-    <h1>TXT 文本合并与排版工具</h1>
+    <h1>文本文档处理器</h1>
   </div>
   <button class="theme-toggle" id="themeToggle" aria-label="切换明暗主题">
     <svg class="sun" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
@@ -343,14 +375,15 @@
   </div>
   <div class="file-list" id="fileList"></div>
 
-  <div class="section-sub">处理方式</div>
-  <div class="segmented" id="modeSwitch">
-    <button type="button" data-mode="merge" class="active">合并为一个成品</button>
-    <button type="button" data-mode="separate">每个文件分别处理</button>
-  </div>
-
-  <div id="mergeOptions">
-    <div class="field">
+  <div class="inline-row">
+    <div class="inline-item">
+      <span class="inline-label">处理方式</span>
+      <div class="segmented" id="modeSwitch">
+        <button type="button" data-mode="merge" class="active">合并为一个成品</button>
+        <button type="button" data-mode="separate">每个文件分别处理</button>
+      </div>
+    </div>
+    <div class="inline-item grow" id="mergeOptions">
       <label for="mergeStrategy">合并策略</label>
       <select id="mergeStrategy">
         <option value="versions">versions · 同一本书的不同版本，逐章择优</option>
@@ -362,16 +395,11 @@
 
 <div class="card">
   <h2>排版选项</h2>
-  <div class="field">
-    <label for="titleTemplate">自定义章节标题格式</label>
-    <input type="text" id="titleTemplate" value="## [第 {num} 章]　{title}">
-    <p class="hint">
-      占位符：{num} 章号 · {title} 副标题 · {prefix} 番外等分组 · {unit} 章/回/节 · {raw} 原始标题行。
-      txt / md 输出会自动在最前面加 <code>## </code>；docx / PDF / EPUB 使用真正的标题样式。
-    </p>
-  </div>
-
-  <div class="grid2">
+  <div class="grid3">
+    <div class="field">
+      <label for="titleTemplate">自定义章节标题格式</label>
+      <input type="text" id="titleTemplate" value="## [第 {num} 章]　{title}">
+    </div>
     <div class="field">
       <label for="numWidth">章号位数</label>
       <input type="number" id="numWidth" value="3" min="1" max="6">
@@ -382,18 +410,16 @@
     </div>
   </div>
 
-  <div class="options" style="margin-top: 18px;">
-    <div class="checkbox-grid">
-      <label class="checkbox-item">
-        <input type="checkbox" id="optClean" checked>
-        清理乱码 / 控制字符 / 零宽字符
-      </label>
-      <label class="checkbox-item">
-        <input type="checkbox" id="optIndent" checked>
-        段落首行缩进（全角两字）
-      </label>
-    </div>
+  <div class="tokens">
+    <span class="token"><code>{num}</code><em>章号，按位数补零</em></span>
+    <span class="token"><code>{title}</code><em>副标题</em></span>
+    <span class="token"><code>{prefix}</code><em>分组前缀，如「番外」</em></span>
+    <span class="token"><code>{unit}</code><em>章 / 回 / 节</em></span>
+    <span class="token"><code>{raw}</code><em>原始标题整行</em></span>
   </div>
+  <p class="note-line">
+    txt / md 输出会自动在最前面加 <code>## </code>；docx / PDF / EPUB 使用真正的标题样式，不会出现字面井号。
+  </p>
 </div>
 
 <div class="card">
@@ -530,8 +556,8 @@ function readFormatOptions() {
     chapterTitle: rawTemplate || '[第 {num} 章]' + FW + '{title}',
     sectionTitle: $('sectionTitle').value || '{title}',
     numWidth: Number($('numWidth').value) || 3,
-    indent: $('optIndent').checked ? FW + FW : '',
-    stripInvisible: $('optClean').checked,
+    indent: FW + FW,
+    stripInvisible: true,
     mdHeading: 'auto',
   };
 }

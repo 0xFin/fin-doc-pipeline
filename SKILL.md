@@ -20,8 +20,14 @@ Requires Node.js 18+. No packages to install.
 
 ## Installing and refreshing
 
-Copy the directory into a scanned skills root; DSH discovers it within a few
-seconds and no restart or new session is needed.
+Copy the directory into a scanned skills root. Discovery happens within a few
+seconds and the **model** catalog refreshes on its own, so the agent can call the
+skill immediately.
+
+The **`/` menu in the web UI is cached per session** and only refreshes when the
+agent preset changes, a plugin toggles, or the page reconnects. After installing
+a new skill, reload the page (Cmd+R / Ctrl+R) before expecting it in the slash
+menu.
 
     cp -R fin-doc-pipeline ~/.dsh/skills/
 

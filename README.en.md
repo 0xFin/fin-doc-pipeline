@@ -112,6 +112,9 @@ fin-doc-pipeline install-skill --link             # symlink, edits apply live
 fin-doc-pipeline install-skill --uninstall
 ```
 
+> The agent picks the skill up within seconds, but the web UI caches the `/` menu
+> per session: **reload the page** (Cmd+R / Ctrl+R) before it shows up there.
+
 Or just copy the directory: `cp -R . ~/.dsh/skills/fin-doc-pipeline`. DeepSeek
 Harness picks it up within a few seconds, without restarting the app or opening
 a new session. The bundled `SKILL.md` follows the Agent Skills convention and

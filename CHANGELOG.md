@@ -1,29 +1,20 @@
 # Changelog
 
-## Unreleased
+## 0.4.0 — 2026-11-03
 
-- `start.command`: double-click launcher that serves the folder and opens the
-  browser; the page now explains the `file://` module restriction instead of
-  silently ignoring clicks, and the theme toggle runs outside the module
-
-- Fix the merge ordering: a single source is passed through untouched, and
-  multi-file merges follow the most complete source instead of stacking every
-  special chapter first, then volumes, then chapters (`全文完` no longer jumps to
-  the front and volumes no longer precede chapter 1)
-
-- Web UI rewritten on top of the original warm-theme design: one batch file slot,
-  merge/independent switch, format chips, live preview, stats and merge report
-- Chapter template default is now `## [第 {num} 章]　{title}`; the `##` is treated
-  as a Markdown marker, so DOCX/PDF/EPUB get a real heading instead of a literal
-  hash sign
-- `sectionPrefix` option: text output can mark sections differently from chapters
-- Browser build refuses DOCX/EPUB/PDF input with a clear message instead of
-  producing garbage
-- Layout pass: title is now 「文本文档处理器」, larger headings, mode + strategy
-  side by side, three formatting fields in a row, placeholder legend, and the
-  redundant clean/indent checkboxes removed
-- Download is one button next to 「开始处理」 that appears after a run; the preview
-  header now reports line and character counts instead of per-file links
+- Web UI rebuilt on the original warm-theme design: one batch file slot, merge
+  or independent processing, format chips, live preview, stats and merge report
+- A single 「下载文档」 button next to 「开始处理」 that appears after a run
+- Chapter template default is `## [第 {num} 章]　{title}`; the `##` is treated as a
+  Markdown marker, so DOCX/PDF/EPUB get real headings instead of a literal hash
+- `sectionPrefix` lets text output mark sections separately from chapters
+- Browser build refuses DOCX/EPUB/PDF input with a clear message
+- `start.command` launcher; the page explains the `file://` module restriction
+  instead of silently ignoring clicks, and the theme toggle no longer depends on
+  the module bundle
+- Fix merge ordering: a single source is passed through untouched and multi-file
+  merges follow the most complete source, so `全文完` no longer jumps to the front
+  and volumes no longer precede chapter 1
 
 ## 0.3.1
 

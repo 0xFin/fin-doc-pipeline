@@ -3,6 +3,7 @@ dist/
 out/
 tmp/
 *.log
-.DS_Store*.tgz
+*.tgz
+.DS_Store
 .idea/
 .vscode/

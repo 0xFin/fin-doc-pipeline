@@ -21,7 +21,8 @@
 - 109 tests, 14 of which cover the new rules
 - Pushing a `v*` tag now publishes the GitHub release and the npm package
   automatically (`.github/workflows/release.yml`), and CI re-creates a missing
-  release from `CHANGELOG.md`
+  release from `CHANGELOG.md`; CI also keeps the repository description and
+  homepage in sync
 
 ## 0.5.0 — 2026-11-04
 

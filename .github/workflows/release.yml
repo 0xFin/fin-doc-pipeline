@@ -10,11 +10,31 @@ permissions:
 jobs:
   release:
     runs-on: ubuntu-latest
+    env:
+      NPM_TOKEN: ${{ secrets.NPM_TOKEN }}
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          registry-url: https://registry.npmjs.org
+
       - name: Create the GitHub release
         run: gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME" || true
         env:
           GH_TOKEN: ${{ github.token }}
+
+      - name: Publish to npm
+        if: env.NPM_TOKEN != ''
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
+        run: npm publish
+
+      - name: Explain a skipped publish
+        if: env.NPM_TOKEN == ''
+        run: |
+          echo '::notice::NPM_TOKEN is not set, so the npm publish step was skipped.'
+          echo 'Add it under Settings → Secrets and variables → Actions → New repository secret.'

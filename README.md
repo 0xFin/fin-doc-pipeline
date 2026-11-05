@@ -29,6 +29,8 @@ fin-doc-pipeline convert 全书.txt --to epub,docx,pdf      # 导出成品
 
 Web 版完全在浏览器本地运行，没有后端、不上传文件。
 
+**在线版：<https://0xFin.github.io/fin-doc-pipeline/>** —— 打开即用，文件只在你的浏览器里处理。
+
 **直接双击 `index.html` 就能用。** 编码识别、解析、合并、排版和 12 种格式导出全部内联在这一个文件里，离线、断网、拷进 U 盘都能跑，不需要本地服务器，也不需要 `start.command`。把文件拖进浏览器标签页打开，收藏那个 `file://` 地址即可当成书签。
 
 `index.html` 是生成产物，不要手改：页面结构与样式在 `web/index.template.html`，交互逻辑在 `web/app.mjs`，改完运行 `npm run build` 重新内联。

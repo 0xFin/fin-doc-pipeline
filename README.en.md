@@ -50,6 +50,8 @@ characters and private-use glyphs. Chapter identity is `(group, number)`, so
 
 The browser build runs entirely locally, with no backend and no uploads.
 
+**Live demo: <https://0xFin.github.io/fin-doc-pipeline/>** — opens instantly; files never leave the browser.
+
 **`index.html` works opened straight from disk.** Encoding detection, parsing,
 merging, typesetting and all twelve export formats are inlined into that one
 file, so it runs offline — from a USB stick, with no server and no

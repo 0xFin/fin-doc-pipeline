@@ -22,8 +22,16 @@ jobs:
           node-version: 20
           registry-url: https://registry.npmjs.org
 
-      - name: Create the GitHub release
-        run: gh release create "$GITHUB_REF_NAME" --generate-notes --title "$GITHUB_REF_NAME" || true
+      - name: Read the CHANGELOG entry for this tag
+        run: node scripts/release-notes.mjs "$GITHUB_REF_NAME"
+
+      - name: Create or update the GitHub release
+        run: |
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
+          fi
         env:
           GH_TOKEN: ${{ github.token }}
 
@@ -37,4 +45,4 @@ jobs:
         if: env.NPM_TOKEN == ''
         run: |
           echo '::notice::NPM_TOKEN is not set, so the npm publish step was skipped.'
-          echo 'Add it under Settings → Secrets and variables → Actions → New repository secret.'
+          echo 'Add it under Settings -> Secrets and variables -> Actions -> New repository secret.'

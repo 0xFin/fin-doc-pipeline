@@ -1,5 +1,25 @@
 # Changelog
 
+## 0.6.0 — 2026-11-05
+
+- Simplified Chinese proofreading, one switch: `--proofread`
+  - `C001` traditional → simplified, from a CLDR derived character table with
+    phrase guards for 乾/著/瞭/藉 (乾隆, 著作, 瞭望, 慰藉 keep their form)
+  - `C002` 「」『』 become “”‘’; half-width punctuation and parentheses next to
+    Chinese become full-width
+  - `C003` repeated identical punctuation collapses to one, `……` is preserved
+  - `C004` numbers and English words are half-width, plain words capitalised,
+    known acronyms and product names upper case (KFC, USD, USDT, iPhone)
+  - `C005` dates unify to `yyyy-MM-dd HH:mm`
+  - `C006` built-in list of common misspellings (按耐→按捺, 既使→即使…)
+  - `C007` doubled particles and words (的的 → 的)
+  - `C008` untitled chapters get a generated title from their first paragraph,
+    at most 6 characters; `--auto-titles` runs only this rule
+  - `C009` wording hints (大约…左右, 原因是…造成的, 通过…使…), report only
+- `--simplify` converts characters only; `check --fix-rules` accepts the C rules
+- Web UI exposes both switches; the single file page grows to 199 KB
+- 109 tests, 14 of which cover the new rules
+
 ## 0.5.0 — 2026-11-04
 
 - `index.html` is now one self contained file: the whole browser build

@@ -81,7 +81,7 @@ python3 -m http.server 8000     # or manually
   duplicated paragraphs inside a chapter
 - **Two merge modes** `versions` (one book, keep the best copy) and `concat`
   (several books, keep everything)
-- **Lint and repair** twenty textual and structural rules with safe auto-fixes
+- **Lint and repair** twenty textual and structural rules with safe auto-fixes, plus Simplified Chinese proofreading (traditional → simplified, full-width punctuation, English casing, ISO dates, common typos, generated chapter titles)
 - **Typesetting** title templates, indentation, blank-line policy, optional
   reflow and punctuation normalisation
 - **Export** plain text, Markdown, HTML, RTF, DOCX, EPUB 3 and PDF, any
@@ -96,6 +96,29 @@ python3 -m http.server 8000     # or manually
 - **Agent friendly** every command supports `--json` and `--dry-run`
 - **Safe by default** sources are never deleted without two explicit flags, and
   removal goes to the trash rather than `rm`
+
+## Chinese proofreading
+
+```sh
+fin-doc-pipeline format book.txt --proofread -o book.out.txt
+fin-doc-pipeline format book.txt --simplify      # characters only
+fin-doc-pipeline format book.txt --auto-titles   # missing titles only
+```
+
+| Rule | What it does |
+| --- | --- |
+| C001 | Traditional characters become Simplified; 乾/著/瞭/藉 are corrected by context (乾隆, 乾坤, 著作, 瞭望, 慰藉 kept) |
+| C002 | 「」『』 → “”‘’; half-width punctuation and parentheses next to Chinese become full-width |
+| C003 | repeated identical punctuation collapses to one; `……` is left alone |
+| C004 | numbers and English go half-width, words are capitalised, known acronyms and product names upper case (KFC, USD, USDT) |
+| C005 | dates unify to `yyyy-MM-dd HH:mm` (`2024年3月5日 12:30` → `2024-03-05 12:30`) |
+| C006 | built-in list of common misspellings (按耐→按捺, 既使→即使 …) |
+| C007 | doubled particles and words (的的 → 的) |
+| C008 | a chapter without a title gets one generated from its first paragraph, at most 6 characters |
+| C009 | wording hints (大约…左右, 原因是…造成的, 通过…使…), reported not rewritten |
+
+The pass is deterministic and idempotent. `check --fix-rules C001,C002` runs
+individual rules; `check` reports them without touching the file.
 
 ## Install
 

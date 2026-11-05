@@ -17,7 +17,8 @@ import { installBuffer } from './buffer.mjs';
 import { detectEncoding } from '../src/encoding.mjs';
 import { parseDocument, documentStats } from '../src/parser.mjs';
 import { mergeDocuments, renderMergeReport } from '../src/merge.mjs';
-import { lintDocument } from '../src/lint.mjs';
+import { lintDocument, fixDocument, PROOFREAD_FIXES } from '../src/lint.mjs';
+import { fillChapterTitles } from '../src/chinese.mjs';
 import { renderDocument, DEFAULT_FORMAT } from '../src/typography.mjs';
 import { renderFormat } from '../src/converters.mjs';
 
@@ -133,18 +134,31 @@ function decodeFiles() {
   }
 }
 
+function applyProofreading(entries) {
+  const simplify = $('proofread').checked;
+  const autoTitles = $('autoTitles').checked;
+  if (!simplify && !autoTitles) return entries;
+  return entries.map((entry) => {
+    let doc = entry.doc;
+    if (simplify) doc = fixDocument(doc, { rules: PROOFREAD_FIXES }).doc;
+    if (autoTitles) doc = fillChapterTitles(doc).doc;
+    return { ...entry, doc };
+  });
+}
+
 function buildEntries() {
   decodeFiles();
   const structure = structureOptions();
 
   if (state.mode === 'separate') {
-    return state.files.map((file) => ({
+    const entries = state.files.map((file) => ({
       stem: stemOf(file.name),
       doc: parseDocument(file.text, structure),
       encoding: file.encoding,
       sourceText: file.text,
       report: '',
     }));
+    return applyProofreading(entries);
   }
 
   const docs = state.files.map((file) => ({
@@ -154,13 +168,13 @@ function buildEntries() {
     doc: parseDocument(file.text, structure),
   }));
   const merged = mergeDocuments(docs, { mode: state.strategy });
-  return [{
+  return applyProofreading([{
     stem: state.files.length > 1 ? '合并结果' : stemOf(state.files[0].name),
     doc: merged.doc,
     encoding: state.files.map((f) => f.encoding).join(' / '),
     sourceText: state.files.map((f) => f.text).join(''),
     report: state.files.length > 1 ? renderMergeReport(merged.report) : '',
-  }];
+  }]);
 }
 
 function formatFor(format, base) {

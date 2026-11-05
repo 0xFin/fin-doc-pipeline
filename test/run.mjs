@@ -31,6 +31,10 @@ import { loadEpub } from '../src/loaders/epub.mjs';
 import { isContainer, isKnownInput, loadDocument, formatOf, loadMarkup } from '../src/loaders/index.mjs';
 import { toJson, toYaml, toXml, toCsv, toJs } from '../src/formats/data.mjs';
 import { render as renderWebIndex, bundle as bundleWeb } from '../scripts/build-web.mjs';
+import {
+  toSimplified, traditionalChars, normalizeChinesePunctuation,
+  normalizeEnglishWords, normalizeDateAndTime, findTypos, deriveChapterTitle, fillChapterTitles,
+} from '../src/chinese.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(HERE, '..', 'src', 'cli.mjs');
@@ -866,6 +870,95 @@ group('heading customisation', () => {
     assert.equal(markdownMarker(doc.chapters[0], { mdHeading: 'none' }), '');
     assert.equal(markdownMarker(doc.chapters[0], { mdHeading: 'level:4' }), '####');
     assert.equal(markdownMarker(doc.chapters[0], { mdHeading: 'preserve' }), '##');
+  });
+});
+
+group('chinese proofreading', () => {
+  test('traditional characters become simplified', () => {
+    assert.equal(toSimplified('繁體字轉換與標點符號'), '繁体字转换与标点符号');
+  });
+
+  test('context sensitive characters keep their correct form', () => {
+    assert.equal(toSimplified('乾隆與乾坤'), '乾隆与乾坤');
+    assert.ok(toSimplified('我們乾杯').includes('干杯'));
+    assert.ok(toSimplified('這本著名的著作').includes('著作'));
+    assert.ok(toSimplified('他著急地睡著了').includes('着急'));
+    assert.ok(toSimplified('尋求慰藉').includes('慰藉'));
+    assert.ok(toSimplified('找個藉口').includes('借口'));
+  });
+
+  test('traditional characters are reported for lint', () => {
+    assert.deepEqual(traditionalChars('繁體字'), ['體']);
+    assert.deepEqual(traditionalChars('简体字'), []);
+  });
+
+  test('corner brackets become curly quotes', () => {
+    assert.equal(normalizeChinesePunctuation('「你好」「再見」'), '“你好”“再見”');
+  });
+
+  test('repeated punctuation collapses but the ellipsis survives', () => {
+    assert.equal(normalizeChinesePunctuation('真的！！！'), '真的！');
+    assert.equal(normalizeChinesePunctuation('他說……然後走了！！！'), '他說……然後走了！');
+    assert.equal(normalizeChinesePunctuation('真的，，，'), '真的，');
+  });
+
+  test('half-width punctuation next to Chinese becomes full-width', () => {
+    assert.equal(normalizeChinesePunctuation('他說,好;真的'), '他說，好；真的');
+  });
+
+  test('english words are half-width, title case, acronyms upper case', () => {
+    assert.equal(normalizeEnglishWords('hello world'), 'Hello World');
+    assert.equal(normalizeEnglishWords('kfc 和 usdt'), 'KFC 和 USDT');
+    assert.equal(normalizeEnglishWords('iphone'), 'iPhone');
+    assert.equal(normalizeEnglishWords('１２３ＡＢＣ'), '123ABC');
+  });
+
+  test('dates become yyyy-MM-dd and keep the time', () => {
+    assert.equal(normalizeDateAndTime('2024年3月5日'), '2024-03-05');
+    assert.equal(normalizeDateAndTime('2024/3/5 12:30'), '2024-03-05 12:30');
+    assert.equal(normalizeDateAndTime('2024.12.31'), '2024-12-31');
+  });
+
+  test('common typos are found and fixed', () => {
+    assert.deepEqual(findTypos('按耐不住').map((t) => t.right), ['按捺']);
+  });
+
+  test('chapter titles are derived from content', () => {
+    const title = deriveChapterTitle({ paragraphs: ['他推開門，看見屋裡空無一人。'] });
+    assert.equal(title, '他推開門');
+    assert.ok(title.length <= 6);
+  });
+
+  test('lint reports the chinese rules', () => {
+    const doc = parseDocument('第一章 開端\n\n他說：「真的？！！」2024年3月5日。\n');
+    const ids = new Set(lintDocument(doc, { level: 'info' }).issues.map((i) => i.id));
+    for (const id of ['C001', 'C002', 'C003', 'C005']) assert.ok(ids.has(id), 'missing ' + id);
+  });
+
+  test('fixDocument applies the proofreading rules', () => {
+    const doc = parseDocument('第一章 開始\n\n他說：「真的？！！」他按耐不住。\n');
+    const res = fixDocument(doc, { rules: ['C001', 'C002', 'C003', 'C006'] });
+    const text = res.doc.chapters[0].paragraphs.join('');
+    assert.ok(text.includes('“真的？！”'));
+    assert.ok(text.includes('按捺'));
+    assert.ok(res.doc.chapters[0].subtitle.includes('开始'));
+  });
+
+  test('missing chapter titles are generated from the first paragraph', () => {
+    const doc = parseDocument('第一章\n\n夜色深沉，他獨自走在街上。\n');
+    const filled = fillChapterTitles(doc);
+    assert.equal(filled.filled.length, 1);
+    assert.equal(filled.doc.chapters[0].subtitle, '夜色深沉');
+  });
+
+  test('--proofread fixes a messy file end to end', () => {
+    const input = fixture('proofread.txt', '第一章 開始\n\n他說：「真的？！！」他著急地走了。\n\n2024年3月5日 12:30 出發。\n');
+    const out = path.join(TMP, 'proofread.out.txt');
+    execFileSync(process.execPath, [CLI, 'format', input, '--proofread', '-o', out], { encoding: 'utf8' });
+    const text = fs.readFileSync(out, 'utf8');
+    assert.ok(text.includes('开始'));
+    assert.ok(text.includes('“真的？！”'));
+    assert.ok(text.includes('2024-03-05 12:30'));
   });
 });
 

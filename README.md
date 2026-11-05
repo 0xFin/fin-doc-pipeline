@@ -80,7 +80,7 @@ GBK 解码器就抛异常，而 Big5 解码器恰好能接受同一串字节，�
 | 🧱 | **结构化解析**：章 / 节 / 卷 / 特殊篇目 / 番外分组，兼容 Markdown 标题与 DOCX、EPUB、HTML 的层级信息 |
 | 🧹 | **三级去重**：完全相同的文件、跨文件同号章节、章内重复段落 |
 | 🔀 | **两种合并**：`versions`（同书多版本逐章择优）与 `concat`（多书拼接） |
-| ✅ | **校验纠错**：20 条文本与结构规则，白名单内的安全项可自动修复 |
+| ✅ | **校验纠错**：20 条结构与文本规则 + 简体中文校对（繁转简、全角标点、英文/日期规范、错别字、语病提示、自动补标题） |
 | 🖋 | **排版**：标题模板、缩进、空行策略、可选软换行重排与标点规范化 |
 | 📦 | **12 种输出**、**20+ 种输入**，任意组合一条命令完成 |
 | 🤖 | **面向 Agent**：全部命令支持 `--json` / `--dry-run`，自带 `SKILL.md` |
@@ -190,6 +190,33 @@ fin-doc-pipeline convert 全书.txt --to epub,docx,pdf
 fin-doc-pipeline merge a.txt b.txt -o 合集.txt --merge-mode concat --renumber
 ```
 
+## 中文校对
+
+简体中文语境下的校对规则集中在 `--proofread`：
+
+```sh
+fin-doc-pipeline format 书.txt --proofread -o 书.校对.txt
+fin-doc-pipeline merge 卷一.txt 卷二.txt -o 全书.txt --proofread --to epub
+fin-doc-pipeline format 书.txt --simplify      # 只做繁转简
+fin-doc-pipeline format 书.txt --auto-titles   # 只补章节标题
+```
+
+| 规则 | 处理 |
+| --- | --- |
+| C001 | 繁体字 → 简体字；乾/著/瞭/藉 等上下文敏感字按常用词修正（乾隆、乾坤、著作、瞭望、慰藉 保留） |
+| C002 | `「」『』` → `“”‘’`；中文旁的半角 `, ; : ? ! ( )` → 全角 |
+| C003 | 连续重复标点只留一个，`……` 不处理 |
+| C004 | 数字与英文半角；单词首字母大写；KFC、USD、USDT 等缩写与产品名全大写 |
+| C005 | 日期统一 `yyyy-MM-dd HH:mm`，如 `2024年3月5日 12:30` → `2024-03-05 12:30` |
+| C006 | 内置常见错别字表：按耐→按捺、既使→即使… |
+| C007 | 重复用字：的的、了了、词词 → 单字 |
+| C008 | 缺标题的章节按首段拟定标题，不超过 6 字 |
+| C009 | 语病提示（大约…左右、原因是…造成的、通过…使…等），只报告不改写 |
+
+`--proofread` 是一次性开关；也可以 `check --fix-rules C001,C002` 单独选择规则。
+检测与修复都是确定性的：同一份文本跑第二遍不会再改动。无词典可依赖，
+语序和语义层面的问题只提示、不改写，避免把正确的句子改错。
+
 ## 章节标题自定义
 
 ```sh
@@ -268,6 +295,8 @@ src/parser.mjs       文档结构（章 / 节 / 卷 / 特殊篇目）
 src/typography.mjs   清洗、标题模板、成文
 src/merge.mjs        文件 / 章节 / 段落三级去重
 src/lint.mjs         校验规则与安全修复
+src/chinese.mjs      简体中文校对规则（繁转简、标点、英文、日期、错别字、拟标题）
+src/data/t2s.mjs     繁简字表（CLDR 生成，随包固定）
 src/encoding.mjs     评分制编码探测
 src/loaders/         docx / epub / pdf / html / rtf / 各类文本输入
 src/formats/         docx / epub / pdf / rtf / json / yaml / xml / csv / js 输出
@@ -278,7 +307,7 @@ web/app.mjs          浏览器端交互逻辑
 web/buffer.mjs       浏览器用的最小 Buffer 实现
 scripts/build-web.mjs    把 web/ 与 src/ 内联成单文件 index.html
 index.html           生成产物：可离线双击打开的单文件页面
-test/run.mjs         零依赖测试套件（95 项）
+test/run.mjs         零依赖测试套件（109 项）
 ```
 
 ## 路线图
@@ -287,6 +316,7 @@ test/run.mjs         零依赖测试套件（95 项）
 - [x] 12 种输出格式、20+ 种输入格式
 - [x] 可配置标题规则、章节分层、Markdown 层级映射
 - [x] PDF 自动页码、JSON / YAML / XML / CSV / JS 结构化输出
+- [x] 简体中文校对：繁转简、全角标点、英文/日期、错别字、语病提示、自动补章节标题
 - [ ] 二次编码乱码自动还原（iconv）
 - [ ] 可选封面图
 - [ ] PDF 页眉与页脚字段

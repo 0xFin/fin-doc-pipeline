@@ -11,6 +11,11 @@
  */
 
 import { findDuplicateNumbers, findMissingNumbers, chapterCharCount, stripBrackets } from './parser.mjs';
+import {
+  toSimplified, traditionalChars, normalizeQuotes, collapseRepeats,
+  normalizeEnglishWords, normalizeDateAndTime, hasCaseIssue, hasDateIssue,
+  applyTypos, findTypos, findRepeats, findGrammarIssues, fillChapterTitles, PROOFREAD_RULES,
+} from './chinese.mjs';
 
 export const SEVERITY_ORDER = { error: 0, warn: 1, info: 2 };
 
@@ -22,13 +27,21 @@ export const SEVERITY_ORDER = { error: 0, warn: 1, info: 2 };
 export const CLEAN_FIXES = ['T001', 'T002', 'T003', 'T017', 'T018'];
 
 /**
- * Applied by "check --fix": cleaning plus conventional punctuation
- * normalisation (ellipsis, dash, full-width alphanumerics).
+ * Applied by "check --fix": cleaning, conventional punctuation and the
+ * Simplified Chinese proofreading rules (C001-C007). Deterministic: every
+ * rule either removes damage or rewrites to one documented form.
  */
-export const SAFE_FIXES = ['T001', 'T002', 'T003', 'T006', 'T007', 'T016', 'T017', 'T018'];
+export const SAFE_FIXES = [
+  'T001', 'T002', 'T003', 'T006', 'T007', 'T016', 'T017', 'T018',
+  'C001', 'C002', 'C003', 'C004', 'C005', 'C006', 'C007',
+];
+
+/** Applied by --proofread: the full Simplified Chinese cleanup chain. */
+export { PROOFREAD_RULES };
+export const PROOFREAD_FIXES = PROOFREAD_RULES;
 
 /** Only applied when explicitly requested through --rules. */
-export const OPT_IN_FIXES = ['T005', 'T010', 'T015'];
+export const OPT_IN_FIXES = ['T005', 'T010', 'T015', 'C008'];
 
 /** Common web-novel boilerplate. Reported, never removed by default. */
 export const DEFAULT_AD_PATTERNS = [
@@ -115,6 +128,38 @@ export function lintDocument(doc, options) {
         push(makeIssue('T005', 'warn', '中文后使用半角标点', at, { fixable: true }));
       }
 
+      /* ---------- Simplified Chinese proofreading ---------- */
+      const traditional = traditionalChars(p);
+      if (traditional.length) {
+        push(makeIssue('C001', 'warn', '包含繁体字：' + traditional.slice(0, 8).join('') + (traditional.length > 8 ? '…' : ''), at, { fixable: true }));
+      }
+      if (/[「」『』]/.test(p)) {
+        push(makeIssue('C002', 'warn', '使用直角引号「」', at, { fixable: true }));
+      } else if (/\([^()]*[\u4e00-\u9fff][^()]*\)/.test(p)) {
+        push(makeIssue('C002', 'warn', '中文内容使用半角括号', at, { fixable: true }));
+      }
+      if (/([，、；：！？])\1+/.test(p)) {
+        push(makeIssue('C003', 'warn', '连续出现重复标点', at, { fixable: true }));
+      }
+      if (hasCaseIssue(p)) {
+        push(makeIssue('C004', 'info', '英文大小写或字符宽度不规范', at, { fixable: true }));
+      }
+      if (hasDateIssue(p)) {
+        push(makeIssue('C005', 'info', '日期格式不规范', at, { fixable: true }));
+      }
+      const typos = findTypos(p);
+      if (typos.length) {
+        push(makeIssue('C006', 'warn', '疑似错别字：' + typos.slice(0, 3).map((t) => t.wrong + '→' + t.right).join('、'), at, { fixable: true }));
+      }
+      const repeats = findRepeats(p);
+      if (repeats.length) {
+        push(makeIssue('C007', 'warn', '重复用字：' + repeats.slice(0, 3).map((r) => r.text).join('、'), at, { fixable: true }));
+      }
+      const grammar = findGrammarIssues(p);
+      if (grammar.length) {
+        push(makeIssue('C009', 'info', '疑似语病：' + grammar.map((g) => g.message).join('；'), at));
+      }
+
       // Quotes routinely span paragraphs in Chinese dialogue, so balance is
       // checked per chapter rather than per paragraph.
       quoteOpen += (p.match(/\u201C/g) || []).length;
@@ -168,6 +213,10 @@ export function lintDocument(doc, options) {
     if (shortChapters.length) {
       push(makeIssue('T020', 'info', '有 ' + shortChapters.length + ' 个章节正文少于 50 字', {}));
     }
+    const untitled = doc.chapters.filter((c) => c.kind === 'chapter' && !c.subtitle && c.paragraphs.length);
+    for (const ch of untitled) {
+      push(makeIssue('C008', 'info', '章节缺少标题，可从正文拟定', { chapterId: ch.id, chapterTitle: stripBrackets(ch.rawTitle) }, { fixable: true }));
+    }
   }
 
   const counts = { error: 0, warn: 0, info: 0 };
@@ -215,6 +264,16 @@ export function fixDocument(doc, options) {
 
   const fixParagraph = (p) => {
     let s = p;
+
+    /* Simplified Chinese proofreading (C001-C007). */
+    if (rules.has('C001')) { const b = s; s = toSimplified(s); if (s !== b) bump('C001'); }
+    if (rules.has('C002')) { const b = s; s = normalizeQuotes(s); if (s !== b) bump('C002'); }
+    if (rules.has('C003')) { const b = s; s = collapseRepeats(s); if (s !== b) bump('C003'); }
+    if (rules.has('C004')) { const b = s; s = normalizeEnglishWords(s); if (s !== b) bump('C004'); }
+    if (rules.has('C005')) { const b = s; s = normalizeDateAndTime(s); if (s !== b) bump('C005'); }
+    if (rules.has('C006')) { const b = s; s = applyTypos(s); if (s !== b) bump('C006'); }
+    if (rules.has('C007')) { const b = s; s = s.replace(/([的了着过是在和与就也都又还而])\1+/g, '$1'); if (s !== b) bump('C007'); }
+
     if (rules.has('T001')) { const before = s; s = s.replace(/\uFFFD/g, ''); if (s !== before) bump('T001'); }
     if (rules.has('T002')) {
       INVISIBLE.lastIndex = 0;
@@ -247,8 +306,19 @@ export function fixDocument(doc, options) {
     return s;
   };
 
-  const chapters = doc.chapters.map((ch) => {
-    let paragraphs = ch.paragraphs.map(fixParagraph).filter((p) => p.trim());
+  /* Titles go through the same proofreading chain as body text. */
+  const fixTitle = (text) => {
+    let s = text || '';
+    if (rules.has('C001')) s = toSimplified(s);
+    if (rules.has('C002')) s = normalizeQuotes(s);
+    if (rules.has('C003')) s = collapseRepeats(s);
+    if (rules.has('C004')) s = normalizeEnglishWords(s);
+    if (rules.has('C005')) s = normalizeDateAndTime(s);
+    return s;
+  };
+
+  const fixBlock = (block) => {
+    let paragraphs = block.paragraphs.map(fixParagraph).filter((p) => p.trim());
 
     if (rules.has('T015')) {
       const before = paragraphs.length;
@@ -270,13 +340,37 @@ export function fixDocument(doc, options) {
       paragraphs = kept;
     }
 
-    return { ...ch, paragraphs };
-  });
+    const sections = (block.sections || []).map((section) => ({
+      ...section,
+      rawTitle: fixTitle(section.rawTitle),
+      subtitle: fixTitle(section.subtitle),
+      paragraphs: section.paragraphs.map(fixParagraph).filter((p) => p.trim()),
+    }));
+
+    return {
+      ...block,
+      rawTitle: fixTitle(block.rawTitle),
+      subtitle: fixTitle(block.subtitle),
+      paragraphs,
+      sections,
+    };
+  };
+
+  const chapters = doc.chapters.map(fixBlock);
 
   const frontMatter = doc.frontMatter.map(fixParagraph).filter((p) => p.trim());
 
+  let fixedDoc = { ...doc, frontMatter, chapters };
+  if (rules.has('C008')) {
+    const filled = fillChapterTitles(fixedDoc, { maxLength: opts.titleMaxLength || 6 });
+    if (filled.filled.length) {
+      bump('C008', filled.filled.length);
+      fixedDoc = filled.doc;
+    }
+  }
+
   const fixed = Array.from(counter.entries()).map(([id, count]) => ({ id, count }));
-  return { doc: { ...doc, frontMatter, chapters }, fixed };
+  return { doc: fixedDoc, fixed };
 }
 
 /** Render lint results as a compact text report. */

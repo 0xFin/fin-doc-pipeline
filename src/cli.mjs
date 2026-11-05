@@ -19,7 +19,8 @@ import { detectEncoding, describeDetection } from './encoding.mjs';
 import { parseDocument, findDuplicateNumbers, findMissingNumbers, chapterCharCount } from './parser.mjs';
 import { renderDocument, DEFAULT_FORMAT, countText } from './typography.mjs';
 import { mergeDocuments, renderMergeReport, DEFAULT_MERGE } from './merge.mjs';
-import { lintDocument, lintRawText, fixDocument, renderLintReport, CLEAN_FIXES, SAFE_FIXES } from './lint.mjs';
+import { lintDocument, lintRawText, fixDocument, renderLintReport, CLEAN_FIXES, SAFE_FIXES, PROOFREAD_FIXES } from './lint.mjs';
+import { fillChapterTitles } from './chinese.mjs';
 import { renderFormat, SUPPORTED_FORMATS, guessMetaFromFilename } from './converters.mjs';
 import { isContainer, isKnownInput, isMarkup, loadDocument, loadMarkup } from './loaders/index.mjs';
 import { ForgeError, fail, pretty } from './util.mjs';
@@ -143,6 +144,15 @@ function buildOptions(flags, config) {
   if (flags.reflow === true) fmt.reflow = true;
   if (flags.normalize === true) fmt.normalizePunctuation = true;
 
+  /* Simplified Chinese proofreading. --proofread turns every rule on;
+     --simplify only converts traditional characters; --auto-titles only
+     names chapters that have no title. */
+  const proofread = {
+    enabled: flags.proofread === true,
+    simplifyOnly: flags.simplify === true && flags.proofread !== true,
+    autoTitles: flags['auto-titles'] === true || flags.proofread === true,
+  };
+
   const mergeOpts = { ...DEFAULT_MERGE, ...(config.merge || {}) };
   if (flags.pick) mergeOpts.pick = flags.pick;
   if (flags['merge-mode']) mergeOpts.mode = flags['merge-mode'];
@@ -205,6 +215,7 @@ function buildOptions(flags, config) {
     yes: Boolean(flags.yes),
     level: flags.level || 'info',
     structureOptions,
+    proofread,
     recurse: Boolean(flags.recurse),
     glob: flags.glob || null,
   };
@@ -443,6 +454,25 @@ function cmdInspect(files, options, sources) {
   return { command: 'inspect', ok: true, text: lines.join('\n'), files: rows };
 }
 
+/** Run the Simplified Chinese proofreading pass selected by the flags. */
+function applyProofreading(doc, options) {
+  const cfg = options.proofread || {};
+  let out = doc;
+  let fixed = [];
+  if (cfg.enabled || cfg.simplifyOnly) {
+    const rules = cfg.enabled ? PROOFREAD_FIXES : ['C001'];
+    const res = fixDocument(out, { rules });
+    out = res.doc;
+    fixed = res.fixed;
+  }
+  if (cfg.autoTitles) {
+    const filled = fillChapterTitles(out);
+    out = filled.doc;
+    if (filled.filled.length) fixed = fixed.concat([{ id: 'C008', count: filled.filled.length }]);
+  }
+  return { doc: out, fixed };
+}
+
 function cmdFormat(files, options, sources) {
   if (sources.length !== 1) {
     fail('E_ARGS', 'format 只接受一个文件；合并多个文件请使用 merge 命令');
@@ -456,6 +486,10 @@ function cmdFormat(files, options, sources) {
     doc = res.doc;
     fixed = res.fixed;
   }
+
+  const proof = applyProofreading(doc, options);
+  doc = proof.doc;
+  fixed = fixed.concat(proof.fixed);
 
   const text = renderDocument(doc, options.fmt);
   const outFile = ensureDistinctOutput(options.flags.out || defaultOutput(src.path, 'formatted'), [src.path]);
@@ -506,8 +540,9 @@ async function cmdMerge(files, options, sources) {
 
   let fixed = [];
   const fixRes = fixDocument(doc, { rules: CLEAN_FIXES });
-  const finalDoc = fixRes.doc;
-  fixed = fixRes.fixed;
+  const proof = applyProofreading(fixRes.doc, options);
+  const finalDoc = proof.doc;
+  fixed = fixRes.fixed.concat(proof.fixed);
 
   const text = renderDocument(finalDoc, options.fmt);
   const outFile = ensureDistinctOutput(options.flags.out || defaultOutput(sources[0].path, 'merged'), sources.map((s) => s.path));
@@ -578,7 +613,11 @@ async function cmdCheck(files, options, sources) {
   let outFile = options.flags.out || null;
 
   if (options.flags.fix === true) {
-    const res = fixDocument(doc, { rules: options.flags['fix-rules'] ? String(options.flags['fix-rules']).split(',') : SAFE_FIXES });
+    const ruleList = options.flags['fix-rules']
+      ? String(options.flags['fix-rules']).split(',').map((s) => s.trim()).filter(Boolean)
+      : SAFE_FIXES.slice();
+    if (options.proofread && options.proofread.autoTitles && !ruleList.includes('C008')) ruleList.push('C008');
+    const res = fixDocument(doc, { rules: ruleList });
     doc = res.doc;
     fixed = res.fixed;
     outFile = outFile || defaultOutput(src.path, 'fixed');
@@ -675,7 +714,7 @@ function cmdConvert(files, options, sources) {
   if (sources.length !== 1) fail('E_ARGS', 'convert 只接受一个文件');
   const src = sources[0];
   const base = buildDocument(src, options);
-  const cleaned = fixDocument(base, { rules: CLEAN_FIXES }).doc;
+  const cleaned = applyProofreading(fixDocument(base, { rules: CLEAN_FIXES }).doc, options).doc;
 
   const config = options.config || {};
   const configured = (config.convert && config.convert.to) || null;
@@ -843,6 +882,11 @@ function helpText() {
     '      --reflow          合并软换行（有风险，默认关闭）',
     '      --normalize       规范化标点（默认关闭）',
     '',
+    '中文校对（简体）:',
+    '      --proofread       一次做完：繁转简 + 全角标点 + 英文/日期规范 + 错别字 + 自动补标题',
+    '      --simplify        只做繁体转简体',
+    '      --auto-titles     缺少标题的章节按正文拟定（≤6 字）',
+    '',    '',
     '合并:',
     '      --to <格式>       合并后同时导出，可逗号分隔（同 convert）',
 '      --merge-mode <m>  versions（同书多版本，逐章择优）| concat（多本书拼接，默认 versions）',
@@ -853,7 +897,7 @@ function helpText() {
     '',
     '检查:',
     '      --fix             应用安全修复',
-    '      --fix-rules <ids> 指定修复规则，逗号分隔（T001,T006…）',
+    '      --fix-rules <ids> 指定修复规则，逗号分隔（T001,T006… 或 C001-C008）',
     '      --level <级别>    error | warn | info（默认 info）',
     '',
     '安全:',

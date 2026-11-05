@@ -8,6 +8,7 @@
 
 import { stripBrackets } from './parser.mjs';
 import { padNum } from './util.mjs';
+import { normalizeChinesePunctuation } from './chinese.mjs';
 
 /** Default formatting options. Every field can be overridden by config. */
 export const DEFAULT_FORMAT = {
@@ -185,22 +186,17 @@ export function reflowParagraphs(paragraphs) {
   return out;
 }
 
-/** Apply safe punctuation normalisation. */
+/**
+ * Apply safe punctuation normalisation: ASCII ellipsis, Chinese full-width
+ * marks, curly quotes, repeated marks, dashes and stray spaces between
+ * Chinese characters. Shared with the proofreading pass in chinese.mjs.
+ */
 export function normalizePunctuation(text) {
-  let s = text;
-  // Ellipsis
+  let s = String(text === null || text === undefined ? '' : text);
+  // ASCII ellipsis first, so the Chinese rules see a real ellipsis.
   s = s.replace(/\.{3,}/g, '……');
-  s = s.replace(/。{2,}/g, '……');
-  s = s.replace(/…{3,}/g, '……');
-  // Dash
+  s = normalizeChinesePunctuation(s);
   s = s.replace(/-{2,}/g, '——');
-  // Half width punctuation surrounded by Chinese characters
-  s = s.replace(/([\u4e00-\u9fff])\s*,\s*(?=[\u4e00-\u9fff])/g, '$1，');
-  s = s.replace(/([\u4e00-\u9fff])\s*;\s*(?=[\u4e00-\u9fff])/g, '$1；');
-  s = s.replace(/([\u4e00-\u9fff])\s*:\s*(?=[\u4e00-\u9fff])/g, '$1：');
-  s = s.replace(/([\u4e00-\u9fff])\s*\?\s*/g, '$1？');
-  s = s.replace(/([\u4e00-\u9fff])\s*!\s*/g, '$1！');
-  // Spaces between Chinese characters
   s = s.replace(/([\u4e00-\u9fff])[ \t]+(?=[\u4e00-\u9fff])/g, '$1');
   return s;
 }

@@ -140,8 +140,37 @@ alphanumerics, `T017`/`T018` whitespace, `T019` oversized paragraph, `T020`
 very short chapter. Raw-text rules: `R001` BOM, `R002` line endings, `R003`
 blank-line runs, `R004` trailing space, `R005` tab indent.
 
+Simplified Chinese proofreading adds `C001` traditional characters, `C002`
+punctuation width and corner brackets, `C003` repeated punctuation, `C004`
+English casing, `C005` date format, `C006` common misspellings, `C007`
+repeated particles, `C008` generated chapter titles and `C009` wording hints.
+`C001`–`C007` are safe and run with `--fix`; `C008` needs `--auto-titles`;
+`C009` is report only.
+
 `--fix` applies only safe repairs. Content rewriting (punctuation, full-width
 digits, boilerplate removal) requires `--rules`.
+
+### proofread — Simplified Chinese rules
+
+    node src/cli.mjs format book.txt --proofread -o out.txt   # everything
+    node src/cli.mjs format book.txt --simplify -o out.txt    # characters only
+    node src/cli.mjs format book.txt --auto-titles -o out.txt # titles only
+
+| Rule | What it does |
+| --- | --- |
+| `C001` | Traditional → Simplified. 乾/著/瞭/藉 are context corrected: 乾隆, 乾坤, 著作, 瞭望, 慰藉 stay, 乾杯→干杯, 著急→着急, 藉口→借口 |
+| `C002` | 「」『』 become “”‘’; half-width `, ; : ? ! ( )` next to Chinese become full-width |
+| `C003` | repeated identical punctuation collapses to one; `……` is preserved |
+| `C004` | numbers and English words go half-width, plain words are capitalised, known acronyms and product names are upper case (KFC, USD, USDT, iPhone) |
+| `C005` | dates unify to `yyyy-MM-dd HH:mm`: 2024年3月5日 12:30 → 2024-03-05 12:30 |
+| `C006` | built-in misspelling list: 按耐→按捺, 既使→即使, 迫不急待→迫不及待 … |
+| `C007` | doubled particles and words: 的的→的, 看看看看 flagged |
+| `C008` | untitled chapters get a title from their first paragraph, at most 6 characters |
+| `C009` | wording hints (大约…左右, 原因是…造成的, 通过…使…), report only |
+
+The chain is deterministic and idempotent: a second run changes nothing.
+Word order and semantics are not rewritten automatically; `C009` reports them
+instead of guessing. Use `check --fix-rules C001,C002` for individual rules.
 
 ### convert — other formats
 
@@ -347,6 +376,8 @@ result still looks wrong:
     src/typography.mjs  cleaning, title templates, assembly
     src/merge.mjs       file / chapter / paragraph dedupe
     src/lint.mjs        rules and safe repairs
+    src/chinese.mjs     Simplified Chinese rules and chapter title synthesis
+    src/data/t2s.mjs    traditional → simplified table (generated, checked in)
     src/converters.mjs  Markdown and HTML output
     src/cli.mjs         command line interface
     test/run.mjs        dependency free test suite

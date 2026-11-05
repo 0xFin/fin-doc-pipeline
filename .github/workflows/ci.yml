@@ -25,3 +25,32 @@ jobs:
           node-version: ${{ matrix.node }}
       - name: Run the dependency free test suite
         run: node test/run.mjs
+
+  ensure-release:
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Create the release when the current version tag has none
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version=$(node -p "require('./package.json').version")
+          tag="v$version"
+          if ! git rev-parse -q --verify "refs/tags/$tag" >/dev/null; then
+            echo "tag $tag has not been published yet"
+            exit 0
+          fi
+          node scripts/release-notes.mjs "$tag"
+          if gh release view "$tag" >/dev/null 2>&1; then
+            gh release edit "$tag" --title "$tag" --notes-file RELEASE_NOTES.md
+          else
+            gh release create "$tag" --title "$tag" --notes-file RELEASE_NOTES.md
+          fi

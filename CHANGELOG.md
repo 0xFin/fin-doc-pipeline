@@ -19,6 +19,9 @@
 - `--simplify` converts characters only; `check --fix-rules` accepts the C rules
 - Web UI exposes both switches; the single file page grows to 199 KB
 - 109 tests, 14 of which cover the new rules
+- Pushing a `v*` tag now publishes the GitHub release and the npm package
+  automatically (`.github/workflows/release.yml`), and CI re-creates a missing
+  release from `CHANGELOG.md`
 
 ## 0.5.0 — 2026-11-04
 

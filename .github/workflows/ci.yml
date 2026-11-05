@@ -31,6 +31,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
+    env:
+      GH_PAT: ${{ secrets.GH_PAT }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -55,11 +57,21 @@ jobs:
             gh release create "$tag" --title "$tag" --notes-file RELEASE_NOTES.md
           fi
 
-      - name: Sync the repository description and homepage
-        continue-on-error: true
+      - name: Sync the repository description, homepage and topics
+        if: env.GH_PAT != ''
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.GH_PAT }}
         run: |
           gh api -X PATCH "repos/$GITHUB_REPOSITORY" \
             -f description="中文文本处理流水线：编码识别 · 去重合并 · 校对排版 · 12 种格式互转。Dependency-free text pipeline: encoding, merge, proofread, 12 formats." \
-            -f homepage="https://0xFin.github.io/fin-doc-pipeline/"
+            -f homepage="https://0xFin.github.io/fin-doc-pipeline/" \
+            -F has_discussions=true > /dev/null
+          gh api -X PUT "repos/$GITHUB_REPOSITORY/topics" \
+            -f "names[]=chinese" -f "names[]=text-processing" -f "names[]=cli" \
+            -f "names[]=proofreading" -f "names[]=typesetting" -f "names[]=epub" \
+            -f "names[]=docx" -f "names[]=pdf" -f "names[]=agent-skill" -f "names[]=encoding" > /dev/null
+          echo "repository metadata synced"
+
+      - name: Note the missing admin token
+        if: env.GH_PAT == ''
+        run: echo '::notice::GH_PAT is not set; repository description, homepage and topics were not synced.'

@@ -7,6 +7,7 @@ encoding detection · dedupe &amp; merge · Simplified Chinese proofreading · t
   <a href="https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml"><img src="https://github.com/0xFin/fin-doc-pipeline/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
   <a href="https://www.npmjs.com/package/fin-doc-pipeline"><img src="https://img.shields.io/npm/v/fin-doc-pipeline.svg" alt="npm"></a>
   <a href="https://www.npmjs.com/package/fin-doc-pipeline"><img src="https://img.shields.io/npm/dm/fin-doc-pipeline.svg" alt="downloads"></a>
+  <a href="https://github.com/0xFin/fin-doc-pipeline/releases"><img src="https://img.shields.io/github/v/release/0xFin/fin-doc-pipeline?label=release" alt="release"></a>
   <a href="https://0xFin.github.io/fin-doc-pipeline/"><img src="https://img.shields.io/badge/live-demo-brightgreen" alt="demo"></a>
   <a href="LICENSE"><img src="https://img.shields.io/npm/l/fin-doc-pipeline.svg" alt="license"></a>
   <a href="package.json"><img src="https://img.shields.io/node/v/fin-doc-pipeline.svg" alt="node"></a>

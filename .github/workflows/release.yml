@@ -7,6 +7,7 @@ on:
 permissions:
   contents: write
   issues: write
+  id-token: write
 
 jobs:
   release:
@@ -64,7 +65,7 @@ jobs:
         if: env.NPM_TOKEN != '' && steps.npmcheck.outputs.exists == 'false'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish
+        run: npm publish --provenance
 
       - name: Explain a skipped publish
         if: env.NPM_TOKEN == '' || steps.npmcheck.outputs.exists == 'true'

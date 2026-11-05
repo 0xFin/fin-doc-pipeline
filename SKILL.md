@@ -165,7 +165,7 @@ digits, boilerplate removal) requires `--rules`.
 | `C005` | dates unify to `yyyy-MM-dd HH:mm`: 2024年3月5日 12:30 → 2024-03-05 12:30 |
 | `C006` | built-in misspelling list: 按耐→按捺, 既使→即使, 迫不急待→迫不及待 … |
 | `C007` | doubled particles and words: 的的→的, 看看看看 flagged |
-| `C008` | untitled chapters get a title from their first paragraph, at most 6 characters |
+| `C008` | untitled chapters get a title extracted from the whole section (frequency, paragraph coverage, position; wording shared by every chapter is down-weighted; narrative sections fall back to the opening clause), at most 6 characters |
 | `C009` | wording hints (大约…左右, 原因是…造成的, 通过…使…), report only |
 
 The chain is deterministic and idempotent: a second run changes nothing.

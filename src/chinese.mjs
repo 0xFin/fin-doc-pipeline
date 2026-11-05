@@ -272,46 +272,6 @@ export function findRepeats(text) {
   return found;
 }
 
-const TITLE_LEAD = /^[\s\u3000"'“”‘’「」『』（）()【】《》〈〉.,，。！？!?；;：:…—\-]+/;
-const TITLE_TAIL = /[的了着过是在和与及就都也又还而把被让给对从向于之其这那，、；：。！？…]+$/;
-
-/**
- * Suggest a short chapter title from the opening paragraph. Best effort: the
- * first sentence, cut to maxLen characters, with leading punctuation and
- * trailing function words removed.
- */
-export function deriveChapterTitle(chapter, maxLen) {
-  const limit = maxLen || 6;
-  const paragraphs = (chapter && chapter.paragraphs) || [];
-  const first = paragraphs.find((p) => String(p).trim());
-  if (!first) return null;
-  let text = String(first).replace(TITLE_LEAD, '');
-  const sentence = text.split(/[。！？!?…；;，,]/)[0] || text;
-  let candidate = sentence.replace(TITLE_LEAD, '').trim();
-  if (!candidate) return null;
-  if (candidate.length > limit) candidate = candidate.slice(0, limit);
-  candidate = candidate.replace(TITLE_TAIL, '');
-  return candidate || null;
-}
-
-/**
- * Fill in the subtitle of every chapter that lost its title, using its first
- * paragraph. Existing titles are never touched.
- */
-export function fillChapterTitles(doc, options) {
-  const opts = options || {};
-  const limit = opts.maxLength || 6;
-  const filled = [];
-  const chapters = (doc.chapters || []).map((ch) => {
-    if (ch.kind !== 'chapter' || ch.subtitle) return ch;
-    const title = deriveChapterTitle(ch, limit);
-    if (!title) return ch;
-    filled.push({ id: ch.id, title });
-    return { ...ch, subtitle: title, generatedTitle: true };
-  });
-  return { doc: { ...doc, chapters }, filled };
-}
-
 /** Run the full proofreading chain over one paragraph. */
 export function proofreadText(text, options) {
   const opts = options || {};

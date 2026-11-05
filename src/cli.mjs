@@ -20,12 +20,19 @@ import { parseDocument, findDuplicateNumbers, findMissingNumbers, chapterCharCou
 import { renderDocument, DEFAULT_FORMAT, countText } from './typography.mjs';
 import { mergeDocuments, renderMergeReport, DEFAULT_MERGE } from './merge.mjs';
 import { lintDocument, lintRawText, fixDocument, renderLintReport, CLEAN_FIXES, SAFE_FIXES, PROOFREAD_FIXES } from './lint.mjs';
-import { fillChapterTitles } from './chinese.mjs';
+import { fillChapterTitles } from './titles.mjs';
 import { renderFormat, SUPPORTED_FORMATS, guessMetaFromFilename } from './converters.mjs';
 import { isContainer, isKnownInput, isMarkup, loadDocument, loadMarkup } from './loaders/index.mjs';
 import { ForgeError, fail, pretty } from './util.mjs';
 
-const VERSION = '0.4.0';
+const VERSION = (() => {
+  try {
+    const pkg = path.join(path.dirname(fileURLToPath(import.meta.url)), '..', 'package.json');
+    return JSON.parse(fs.readFileSync(pkg, 'utf8')).version;
+  } catch {
+    return '0.0.0';
+  }
+})();
 
 /* =========================================================
    Presets
@@ -885,7 +892,7 @@ function helpText() {
     '中文校对（简体）:',
     '      --proofread       一次做完：繁转简 + 全角标点 + 英文/日期规范 + 错别字 + 自动补标题',
     '      --simplify        只做繁体转简体',
-    '      --auto-titles     缺少标题的章节按正文拟定（≤6 字）',
+    '      --auto-titles     缺少标题的章节读全章内容提炼（≤6 字，抽取式关键词）',
     '',    '',
     '合并:',
     '      --to <格式>       合并后同时导出，可逗号分隔（同 convert）',

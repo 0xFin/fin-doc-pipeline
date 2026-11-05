@@ -18,7 +18,7 @@ import { detectEncoding } from '../src/encoding.mjs';
 import { parseDocument, documentStats } from '../src/parser.mjs';
 import { mergeDocuments, renderMergeReport } from '../src/merge.mjs';
 import { lintDocument, fixDocument, PROOFREAD_FIXES } from '../src/lint.mjs';
-import { fillChapterTitles } from '../src/chinese.mjs';
+import { fillChapterTitles } from '../src/titles.mjs';
 import { renderDocument, DEFAULT_FORMAT } from '../src/typography.mjs';
 import { renderFormat } from '../src/converters.mjs';
 

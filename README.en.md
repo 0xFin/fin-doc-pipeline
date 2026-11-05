@@ -99,7 +99,7 @@ fin-doc-pipeline check book.txt                  # report only
 | `C005` | dates unify to `yyyy-MM-dd HH:mm` |
 | `C006` | built-in list of common misspellings (按耐→按捺, 既使→即使 …) |
 | `C007` | doubled particles and words (的的 → 的) |
-| `C008` | untitled chapters get a generated title, at most 6 characters |
+| `C008` | untitled chapters get a title extracted from the whole section: terms are scored by frequency, paragraph coverage and position, and wording shared by every chapter is down-weighted; when nothing repeats (narrative) the opening clause is used. At most 6 characters |
 | `C009` | wording hints (大约…左右, 原因是…造成的), reported not rewritten |
 
 Deterministic and idempotent: a second run changes nothing. Wording problems are

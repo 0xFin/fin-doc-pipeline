@@ -33,8 +33,9 @@ import { toJson, toYaml, toXml, toCsv, toJs } from '../src/formats/data.mjs';
 import { render as renderWebIndex, bundle as bundleWeb } from '../scripts/build-web.mjs';
 import {
   toSimplified, traditionalChars, normalizeChinesePunctuation,
-  normalizeEnglishWords, normalizeDateAndTime, findTypos, deriveChapterTitle, fillChapterTitles,
+  normalizeEnglishWords, normalizeDateAndTime, findTypos,
 } from '../src/chinese.mjs';
+import { deriveChapterTitle, fillChapterTitles, extractKeyphrases } from '../src/titles.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const CLI = path.join(HERE, '..', 'src', 'cli.mjs');
@@ -923,10 +924,80 @@ group('chinese proofreading', () => {
     assert.deepEqual(findTypos('按耐不住').map((t) => t.right), ['按捺']);
   });
 
-  test('chapter titles are derived from content', () => {
-    const title = deriveChapterTitle({ paragraphs: ['他推開門，看見屋裡空無一人。'] });
-    assert.equal(title, '他推開門');
+  test('chapter titles summarise the whole section, not its opening', () => {
+    const chapter = {
+      paragraphs: [
+        '近年來，平台經濟快速發展，靈活就業成為許多勞動者的選擇。',
+        '平台經濟依託數字技術，把需求與供給即時匹配起來。',
+        '靈活就業的好處是時間自由，但社會保障往往跟不上。',
+        '不少平台從業者沒有簽訂勞動合同，工傷保障成為空白。',
+        '因此，完善靈活就業的社會保障制度，是平台經濟健康發展的關鍵。',
+      ],
+    };
+    const title = deriveChapterTitle(chapter);
+    assert.equal(title, '平台經濟');
     assert.ok(title.length <= 6);
+    const ranked = extractKeyphrases(chapter);
+    assert.ok(ranked[0].count > 1, 'a titled term should repeat in the section');
+  });
+
+  test('chapter titles prefer the longer phrase of a term', () => {
+    const chapter = {
+      paragraphs: [
+        '短期主義讓人只看眼前。',
+        '短期主義的代價會在幾年後顯現。',
+        '企業被短期主義綁住，就不敢投入長期研發。',
+        '擺脫短期主義，需要改變考核方式。',
+      ],
+    };
+    assert.equal(deriveChapterTitle(chapter), '短期主義');
+  });
+
+  test('chapter titles ignore wording shared by every chapter', () => {
+    const doc = {
+      chapters: [
+        {
+          id: 'c1', kind: 'chapter', subtitle: '',
+          paragraphs: [
+            '這個問題值得討論。',
+            '垃圾分類需要居民長期配合。',
+            '垃圾分類的難點在於習慣養成。',
+            '垃圾分類的宣傳必須持續。',
+            '這個問題在小區裡爭議很大。',
+          ],
+        },
+        {
+          id: 'c2', kind: 'chapter', subtitle: '',
+          paragraphs: [
+            '這個問題同樣困擾著用人單位。',
+            '就業是民生之本。',
+            '就業形勢總體穩定。',
+            '就業結構仍然需要調整。',
+            '這個問題要靠政策解決。',
+          ],
+        },
+      ],
+    };
+    const filled = fillChapterTitles(doc);
+    assert.deepEqual(filled.filled.map((item) => item.title), ['垃圾分類', '就業']);
+  });
+
+  test('a narrative section without a repeated term uses its opening clause', () => {
+    const chapter = {
+      paragraphs: [
+        '夜色深沉，他獨自走在街上，風從巷口吹過來。',
+        '他不知道該去哪裡，只知道不能停下來。',
+        '身後的腳步聲越來越近，他的手心開始出汗。',
+        '轉過街角，一盞昏黃的路燈下站著一個人。',
+        '那人抬起頭，露出一張他再熟悉不過的臉。',
+      ],
+    };
+    assert.equal(deriveChapterTitle(chapter), '夜色深沉');
+  });
+
+  test('short chapters fall back to the opening noun phrase', () => {
+    assert.equal(deriveChapterTitle({ paragraphs: ['他推開門，看見屋裡空無一人。'] }), '推開門');
+    assert.equal(deriveChapterTitle({ paragraphs: ['數據備份是系統運維中最容易被忽視的環節。'] }), '數據備份');
   });
 
   test('lint reports the chinese rules', () => {
@@ -944,7 +1015,7 @@ group('chinese proofreading', () => {
     assert.ok(res.doc.chapters[0].subtitle.includes('开始'));
   });
 
-  test('missing chapter titles are generated from the first paragraph', () => {
+  test('missing chapter titles fall back to the opening clause', () => {
     const doc = parseDocument('第一章\n\n夜色深沉，他獨自走在街上。\n');
     const filled = fillChapterTitles(doc);
     assert.equal(filled.filled.length, 1);

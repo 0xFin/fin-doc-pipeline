@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.6.1 — 2026-11-05
+
+- C008 derives a chapter title from the whole section instead of cutting
+  the first sentence: every 2–6 character term is ranked by frequency,
+  paragraph and sentence coverage, first/last position and a noun-phrase
+  suffix list, while terms that appear in many chapters are down-weighted.
+  A section with no repeated term (usually narrative) falls back to its
+  opening clause, cut where the predicate starts rather than at six characters
+- Terms are matched on a Simplified copy of the text, so Traditional sources
+  get the same filtering while the generated title keeps the source script
+- --version now reports the real package version
+- 113 tests, of which 5 cover the title ranking
+
 ## 0.6.0 — 2026-11-05
 
 - Simplified Chinese proofreading, one switch: `--proofread`

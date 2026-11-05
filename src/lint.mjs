@@ -14,8 +14,9 @@ import { findDuplicateNumbers, findMissingNumbers, chapterCharCount, stripBracke
 import {
   toSimplified, traditionalChars, normalizeQuotes, collapseRepeats,
   normalizeEnglishWords, normalizeDateAndTime, hasCaseIssue, hasDateIssue,
-  applyTypos, findTypos, findRepeats, findGrammarIssues, fillChapterTitles, PROOFREAD_RULES,
+  applyTypos, findTypos, findRepeats, findGrammarIssues, PROOFREAD_RULES,
 } from './chinese.mjs';
+import { fillChapterTitles } from './titles.mjs';
 
 export const SEVERITY_ORDER = { error: 0, warn: 1, info: 2 };
 
@@ -215,7 +216,7 @@ export function lintDocument(doc, options) {
     }
     const untitled = doc.chapters.filter((c) => c.kind === 'chapter' && !c.subtitle && c.paragraphs.length);
     for (const ch of untitled) {
-      push(makeIssue('C008', 'info', '章节缺少标题，可从正文拟定', { chapterId: ch.id, chapterTitle: stripBrackets(ch.rawTitle) }, { fixable: true }));
+      push(makeIssue('C008', 'info', '章节缺少标题，可按全章内容提炼', { chapterId: ch.id, chapterTitle: stripBrackets(ch.rawTitle) }, { fixable: true }));
     }
   }
 

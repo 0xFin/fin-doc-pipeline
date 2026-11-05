@@ -6,6 +6,7 @@ on:
 
 permissions:
   contents: write
+  issues: write
 
 jobs:
   release:
@@ -26,14 +27,31 @@ jobs:
         run: node scripts/release-notes.mjs "$GITHUB_REF_NAME"
 
       - name: Create or update the GitHub release
-        run: |
-          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
-          else
-            gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md
-          fi
+        id: release
         env:
           GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            output=$(gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md 2>&1)
+          else
+            output=$(gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md 2>&1)
+          fi
+          code=$?
+          echo "$output"
+          if [ $code -ne 0 ]; then
+            gh issue create --title "release failed for $GITHUB_REF_NAME" --body "$(printf "%s\n\n%s" "command exit $code" "$output")" || true
+            exit $code
+          fi
+
+      - name: Verify the release exists
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh issue create --title "release missing for $GITHUB_REF_NAME" --body "$(gh release list --limit 5 2>&1)" || true
+            exit 1
+          fi
 
       - name: Check whether this version is already on npm
         id: npmcheck

@@ -35,14 +35,23 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
 
+      - name: Check whether this version is already on npm
+        id: npmcheck
+        run: |
+          version=$(node -p "require('./package.json').version")
+          if npm view "fin-doc-pipeline@$version" version >/dev/null 2>&1; then
+            echo "exists=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "exists=false" >> "$GITHUB_OUTPUT"
+          fi
+
       - name: Publish to npm
-        if: env.NPM_TOKEN != ''
+        if: env.NPM_TOKEN != '' && steps.npmcheck.outputs.exists == 'false'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
         run: npm publish
 
       - name: Explain a skipped publish
-        if: env.NPM_TOKEN == ''
+        if: env.NPM_TOKEN == '' || steps.npmcheck.outputs.exists == 'true'
         run: |
-          echo '::notice::NPM_TOKEN is not set, so the npm publish step was skipped.'
-          echo 'Add it under Settings -> Secrets and variables -> Actions -> New repository secret.'
+          echo '::notice::npm publish was skipped (no token, or this version already exists).'

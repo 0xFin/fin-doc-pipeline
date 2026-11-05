@@ -119,14 +119,39 @@ fin-doc-pipeline check 书.txt                  # 只报告，不改文件
 
 ## 安装
 
+要求 Node.js 18+。**没有任何第三方依赖**，不需要 `npm install`。四种方式按需选择。
+
+### 1. 用 npm 安装（推荐）
+
 ```sh
-npm i -g fin-doc-pipeline                 # 1. npm（推荐）
-git clone https://github.com/0xFin/fin-doc-pipeline.git && cd fin-doc-pipeline && ./install.sh   # 2. 源码
-fin-doc-pipeline install-skill            # 3. 作为 Agent 技能，安装到 ~/.dsh/skills
-fin-doc-pipeline install-skill --link     #    软链模式，改代码立即生效
+npm i -g fin-doc-pipeline
 ```
 
-要求 Node.js 18+。**没有任何第三方依赖**，不需要 `npm install`。
+装好后即可使用 `fin-doc-pipeline` 或简写 `fdp`；升级用 `npm i -g fin-doc-pipeline@latest`。
+
+### 2. 从源码安装
+
+```sh
+git clone https://github.com/0xFin/fin-doc-pipeline.git && cd fin-doc-pipeline && ./install.sh
+```
+
+适合想改代码或不想用 npm 的情况。`install.sh` 会把仓库复制进 `~/.dsh/skills/fin-doc-pipeline`，源码目录保留，也可以直接 `node src/cli.mjs` 运行。
+
+### 3. 安装为 Agent 技能
+
+```sh
+fin-doc-pipeline install-skill
+```
+
+把当前包复制到 `~/.dsh/skills/fin-doc-pipeline`，几秒内 Agent 就能识别并调用；需要先完成第 1 步。可用 `--dest` 指定别的技能目录。
+
+### 4. 软链模式（开发用）
+
+```sh
+fin-doc-pipeline install-skill --link
+```
+
+装的是符号链接而不是副本，仓库里改代码立即生效，不用反复重装。
 
 ## 常用命令
 
@@ -210,10 +235,6 @@ fin-doc-pipeline format 书.md --md-title-level 1 --md-chapter-level 2 --md-sect
 
 > 浏览器版只接受文本类输入（txt / md / html / json / csv…）。DOCX / EPUB / PDF
 > **输入**需要解压，请用命令行处理；导出这 12 种格式不受影响。
-
-## 输出预览
-
-![PDF 输出](assets/sample-pdf.png)
 
 ## 项目结构
 

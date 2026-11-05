@@ -117,14 +117,39 @@ reported rather than guessed, so correct sentences are never rewritten.
 
 ## Install
 
+Requires Node.js 18+. **No third-party dependencies**, no `npm install` needed. Pick one of four ways.
+
+### 1. npm (recommended)
+
 ```sh
-npm i -g fin-doc-pipeline                 # 1. npm (recommended)
-git clone https://github.com/0xFin/fin-doc-pipeline.git && cd fin-doc-pipeline && ./install.sh   # 2. from source
-fin-doc-pipeline install-skill            # 3. as an agent skill in ~/.dsh/skills
-fin-doc-pipeline install-skill --link     #    symlink mode: edits apply immediately
+npm i -g fin-doc-pipeline
 ```
 
-Requires Node.js 18+. **No third-party dependencies**, no `npm install` needed.
+Provides `fin-doc-pipeline` and the short alias `fdp`; upgrade with `npm i -g fin-doc-pipeline@latest`.
+
+### 2. From source
+
+```sh
+git clone https://github.com/0xFin/fin-doc-pipeline.git && cd fin-doc-pipeline && ./install.sh
+```
+
+For hacking on the code or avoiding npm. `install.sh` copies the checkout into `~/.dsh/skills/fin-doc-pipeline` and keeps the source tree, so `node src/cli.mjs` also works.
+
+### 3. As an agent skill
+
+```sh
+fin-doc-pipeline install-skill
+```
+
+Copies the package into `~/.dsh/skills/fin-doc-pipeline`; the agent picks it up within seconds. Requires step 1 first. Use `--dest` for another skills root.
+
+### 4. Symlink mode (development)
+
+```sh
+fin-doc-pipeline install-skill --link
+```
+
+Installs a symlink instead of a copy, so edits in the checkout apply immediately without reinstalling.
 
 ## Commands
 
@@ -210,10 +235,6 @@ proofreading, typesetting and all twelve export formats are inlined into one
 
 > The browser build only takes text inputs. DOCX / EPUB / PDF *input* needs
 > decompression, so use the CLI; all twelve export formats work in the browser.
-
-## Output preview
-
-![PDF output](assets/sample-pdf.png)
 
 ## Project layout
 

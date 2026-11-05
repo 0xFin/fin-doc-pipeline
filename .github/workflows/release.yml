@@ -27,28 +27,22 @@ jobs:
       - name: Read the CHANGELOG entry for this tag
         run: node scripts/release-notes.mjs "$GITHUB_REF_NAME"
 
-      - name: Create the GitHub release
-        id: release
+      - name: Create or update the GitHub release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          set +e
-          gh release delete "$GITHUB_REF_NAME" --yes --cleanup-tag=false >/dev/null 2>&1 || true
-          output=$(gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --latest 2>&1)
-          code=$?
-          echo "$output"
-          if [ $code -ne 0 ]; then
-            gh issue create --title "release failed for $GITHUB_REF_NAME" --body "exit $code: $output" || true
-            exit $code
-          fi
-
-      - name: Verify the release exists
-        env:
-          GH_TOKEN: ${{ github.token }}
-        run: |
-          if ! gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
-            gh issue create --title "release missing for $GITHUB_REF_NAME" --body "$(gh release list --limit 5 2>&1)" || true
-            exit 1
+          if gh release view "$GITHUB_REF_NAME" >/dev/null 2>&1; then
+            gh release edit "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --latest
+          else
+            ok=no
+            for attempt in 1 2 3; do
+              if gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file RELEASE_NOTES.md --latest; then ok=yes; break; fi
+              sleep 3
+            done
+            if [ "$ok" != yes ]; then
+              gh issue create --title "release failed for $GITHUB_REF_NAME" --body "gh release create failed after 3 attempts" || true
+              exit 1
+            fi
           fi
 
       - name: Check whether this version is already on npm
@@ -65,7 +59,15 @@ jobs:
         if: env.NPM_TOKEN != '' && steps.npmcheck.outputs.exists == 'false'
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
-        run: npm publish --provenance
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set +e
+          npm publish --provenance 2>&1 | tee npm-publish.log
+          code=${PIPESTATUS[0]}
+          if [ $code -ne 0 ]; then
+            gh issue create --title "npm publish failed for $GITHUB_REF_NAME" --body "$(tail -40 npm-publish.log)" || true
+            exit $code
+          fi
 
       - name: Explain a skipped publish
         if: env.NPM_TOKEN == '' || steps.npmcheck.outputs.exists == 'true'

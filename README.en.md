@@ -101,6 +101,14 @@ fin-doc-pipeline check book.txt                  # report only
 | `C007` | doubled particles and words (的的 → 的) |
 | `C008` | untitled chapters get a title extracted from the whole section: terms are scored by frequency, paragraph coverage and position, and wording shared by every chapter is down-weighted; when nothing repeats (narrative) the opening clause is used. At most 6 characters |
 | `C009` | wording hints (大约…左右, 原因是…造成的), reported not rewritten |
+| `C010` | one space between Chinese and Latin letters: 中文English → 中文 English; digits stay untouched |
+| `C011` | closing punctuation at the start of a paragraph, usually a hard-wrap artifact; a dialogue line starting with “ is fine. Reported only |
+| `C012` | one space between a number and a unit: 5kg → 5 kg; percent and ℃ stay as they are |
+| `C013` | nested book titles / parentheses should switch to 〈〉 or another bracket level. Reported only |
+| `C014` | a second “ before the first closes should be ‘ ’ inside. Reported only |
+
+`check` also inspects the raw text layer (BOM, line endings, blank-line runs,
+trailing spaces, tab indentation) and `check --fix` repairs all of it.
 
 Deterministic and idempotent: a second run changes nothing. Wording problems are
 reported rather than guessed, so correct sentences are never rewritten.

@@ -143,9 +143,16 @@ blank-line runs, `R004` trailing space, `R005` tab indent.
 Simplified Chinese proofreading adds `C001` traditional characters, `C002`
 punctuation width and corner brackets, `C003` repeated punctuation, `C004`
 English casing, `C005` date format, `C006` common misspellings, `C007`
-repeated particles, `C008` generated chapter titles and `C009` wording hints.
-`C001`–`C007` are safe and run with `--fix`; `C008` needs `--auto-titles`;
-`C009` is report only.
+repeated particles, `C008` generated chapter titles, `C009` wording hints,
+`C010` Chinese/Latin spacing, `C011` line-start punctuation, `C012`
+number-unit spacing, `C013` nested book titles and brackets, and `C014`
+nested double quotes. `C001`–`C007`, `C010` and `C012` are safe and run
+with `--fix`; `C008` needs `--auto-titles`; `C009`, `C011`, `C013` and
+`C014` are report only.
+
+Raw-text rules `R001`–`R005` are included in the normal `check` report and
+are repaired by `check --fix`: BOM, line endings, blank-line runs, trailing
+spaces and tab indentation are normalised before the document is parsed.
 
 `--fix` applies only safe repairs. Content rewriting (punctuation, full-width
 digits, boilerplate removal) requires `--rules`.
@@ -167,6 +174,11 @@ digits, boilerplate removal) requires `--rules`.
 | `C007` | doubled particles and words: 的的→的, 看看看看 flagged |
 | `C008` | untitled chapters get a title extracted from the whole section (frequency, paragraph coverage, position; wording shared by every chapter is down-weighted; narrative sections fall back to the opening clause), at most 6 characters |
 | `C009` | wording hints (大约…左右, 原因是…造成的, 通过…使…), report only |
+| `C010` | one space between Chinese and Latin letters: 中文English → 中文 English. Digits are not touched, so 第1章 stays intact |
+| `C011` | closing punctuation at the start of a paragraph (，。、；：？！）】》」』”’), usually a hard-wrap artifact. Opening quotes are fine: a dialogue line starting with “ is normal in novels. Report only |
+| `C012` | one space between a number and a unit: 5kg → 5 kg, 100km → 100 km. Percent and ℃ are left alone |
+| `C013` | nested book titles 《…《…》…》 should use 〈〉 inside; nested parentheses （…（…）…） should use a different bracket level. Report only |
+| `C014` | a second “ before the first closes: inner speech should use ‘’ instead. Report only |
 
 The chain is deterministic and idempotent: a second run changes nothing.
 Word order and semantics are not rewritten automatically; `C009` reports them
@@ -212,6 +224,11 @@ Detection is a pipeline of named rules; the first match wins. Default order:
 | `bracket` | [楔子] 【后记】 | special |
 | `special` | 前言 ／ 尾声 ／ 番外 | special |
 | `heuristic` | short line surrounded by blank lines (opt in) | chapter |
+
+A line that merely starts with the same characters stays body text:
+`第一回合的比赛开始了。`, `第一节课很有意思。` and `第一章讲述了一个故事。` are
+sentences, not headings. A heading is also rejected when the line is longer
+than 40 characters or contains a full stop.
 
 Control them with flags:
 

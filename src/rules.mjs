@@ -94,6 +94,7 @@ const NUM = '[零〇一二三四五六七八九十百千万两0-9]+';
 const CN_CHAPTER = /^\[?\s*(?:(番外|外传|前传|后传|正传|续)\s*)?第\s*([零〇一二三四五六七八九十百千万两0-9]+)\s*([章回节话])\s*\]?\s*(.*)$/;
 const CN_VOLUME = /^\[?\s*第\s*([零〇一二三四五六七八九十百千万两0-9]+)\s*([卷篇部集册])\s*\]?\s*(.*)$/;
 const CN_LIST = /^([零〇一二三四五六七八九十百]+)\s*[、.．]\s*(.*)$/;
+const CN_PAREN_LIST = /^[（(]\s*([零〇一二三四五六七八九十百]+)\s*[）)]\s*(.*)$/;
 const ORDERED = /^(\d{1,3}|[A-Za-z])\s*[).、．]\s+(\S.*)$/;
 const MARKDOWN = /^(#{1,6})\s+(.+)$/;
 const BRACKET = /^[\[【]\s*([^\]】]{1,40}?)\s*[\]】]\s*(.*)$/;
@@ -157,6 +158,24 @@ function hit(kind, level, marker, extra) {
   }, extra || {});
 }
 
+/** Characters that turn "第N回" into an ordinary word (回合, 回事 ...). */
+const UNIT_CONTINUATIONS = { 回: '合事', 节: '课', 章: '程' };
+
+/** A full stop means the line is a sentence, not a heading. */
+const PROSE_STOP = /。/;
+
+/**
+ * Guard against chapter-like prefixes inside ordinary prose:
+ * "第一回合的比赛开始了。" is a sentence, not a chapter heading.
+ */
+function looksLikeProse(line, unit, subtitle) {
+  if (line.length > 40) return true;
+  if (PROSE_STOP.test(line)) return true;
+  const next = String(subtitle || '').slice(0, 1);
+  if (next && UNIT_CONTINUATIONS[unit] && UNIT_CONTINUATIONS[unit].includes(next)) return true;
+  return false;
+}
+
 const RULE_IMPL = {
   manual(line, ctx) {
     if (!ctx.headings) return null;
@@ -201,6 +220,8 @@ const RULE_IMPL = {
   'numbered-cn'(line, ctx) {
     const m = line.match(CN_CHAPTER);
     if (m) {
+      // Ordinary prose can start with the same characters: 第一回合, 第一节课.
+      if (looksLikeProse(line, m[3], m[4])) return null;
       // "第3节" is a sub heading; 章 / 回 / 话 are top level.
       const isSection = m[3] === '节';
       return hit(isSection ? 'section' : 'chapter', isSection ? 2 : 1, 'numbered-cn', {
@@ -241,7 +262,7 @@ const RULE_IMPL = {
   },
 
   'cn-list'(line, ctx) {
-    const m = line.match(CN_LIST);
+    const m = line.match(CN_LIST) || line.match(CN_PAREN_LIST);
     if (!m) return null;
     return hit('section', 2, 'cn-list', {
       num: cnToInt(m[1]),

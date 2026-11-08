@@ -1,5 +1,28 @@
 # Changelog
 
+## 0.7.0 — 2026-11-08
+
+- Raw-text rules R001–R005 are part of the normal check report and are
+  repaired by check --fix: BOM, CRLF/CR, blank-line runs, trailing spaces and
+  tab indentation. R001 no longer depends on a BOM that decoding already
+  stripped, and R003/R004 no longer miss CRLF files
+- Heading detection no longer mistakes prose for a chapter: 第一回合的比赛开始了。,
+  第一节课很有意思。 and 第一章讲述了一个故事。 stay body text, while 第一章 开端
+  and 第12回 风起 keep working. （三） is now recognised as a section list item,
+  as the documentation already claimed
+- Five new Simplified Chinese rules:
+  - C010 Chinese/Latin spacing (中文English → 中文 English); digits stay
+    untouched so 第1章 is not broken apart
+  - C011 closing punctuation at the start of a paragraph, report only.
+    Dialogue lines starting with an opening quote “ are normal and are not
+    flagged
+  - C012 number/unit spacing (5kg → 5 kg); percent and ℃ are left alone
+  - C013 nested book titles and parentheses, report only
+  - C014 nested double quotes, report only
+- check --fix now includes C010 and C012; --proofread runs them as well
+- 121 tests, 8 of them new: heading guard, parenthesised lists, raw-text
+  repair, C010–C014 detection and a CLI end-to-end raw fix
+
 ## 0.6.1 — 2026-11-05
 
 - C008 derives a chapter title from the whole section instead of cutting

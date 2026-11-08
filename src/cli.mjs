@@ -19,7 +19,7 @@ import { detectEncoding, describeDetection } from './encoding.mjs';
 import { parseDocument, findDuplicateNumbers, findMissingNumbers, chapterCharCount } from './parser.mjs';
 import { renderDocument, DEFAULT_FORMAT, countText } from './typography.mjs';
 import { mergeDocuments, renderMergeReport, DEFAULT_MERGE } from './merge.mjs';
-import { lintDocument, lintRawText, fixDocument, renderLintReport, CLEAN_FIXES, SAFE_FIXES, PROOFREAD_FIXES } from './lint.mjs';
+import { lintDocument, lintRawText, fixDocument, fixRawText, countIssues, renderLintReport, CLEAN_FIXES, SAFE_FIXES, PROOFREAD_FIXES } from './lint.mjs';
 import { fillChapterTitles } from './titles.mjs';
 import { renderFormat, SUPPORTED_FORMATS, guessMetaFromFilename } from './converters.mjs';
 import { isContainer, isKnownInput, isMarkup, loadDocument, loadMarkup } from './loaders/index.mjs';
@@ -614,7 +614,7 @@ async function cmdCheck(files, options, sources) {
   const src = sources[0];
   let doc = buildDocument(src, options);
 
-  const rawIssues = lintRawText(src.raw);
+  const rawIssues = lintRawText(src.raw, { bom: src.detection && src.detection.bom });
   const before = lintDocument(doc, { level: options.level });
   let fixed = [];
   let outFile = options.flags.out || null;
@@ -624,9 +624,15 @@ async function cmdCheck(files, options, sources) {
       ? String(options.flags['fix-rules']).split(',').map((s) => s.trim()).filter(Boolean)
       : SAFE_FIXES.slice();
     if (options.proofread && options.proofread.autoTitles && !ruleList.includes('C008')) ruleList.push('C008');
+
+    // Raw-text repairs run first; the parser then sees clean line endings.
+    const rawFix = fixRawText(src.raw, { bom: src.detection && src.detection.bom });
+    if (rawFix.fixed.length) fixed = fixed.concat(rawFix.fixed);
+    if (rawFix.text !== src.raw) doc = buildDocument({ ...src, raw: rawFix.text }, options);
+
     const res = fixDocument(doc, { rules: ruleList });
     doc = res.doc;
-    fixed = res.fixed;
+    fixed = fixed.concat(res.fixed);
     outFile = outFile || defaultOutput(src.path, 'fixed');
     if (!options.dryRun) {
       const text = renderDocument(doc, options.fmt);
@@ -643,7 +649,8 @@ async function cmdCheck(files, options, sources) {
   const lines = [];
   lines.push('■ ' + src.label + '  编码 ' + src.detection.label);
   lines.push('');
-  lines.push(renderLintReport(before));
+  const combined = rawIssues.concat(before.issues);
+  lines.push(renderLintReport({ issues: combined, counts: countIssues(combined) }));
   if (after) {
     lines.push('');
     lines.push('修复后：');
@@ -890,7 +897,7 @@ function helpText() {
     '      --normalize       规范化标点（默认关闭）',
     '',
     '中文校对（简体）:',
-    '      --proofread       一次做完：繁转简 + 全角标点 + 英文/日期规范 + 错别字 + 自动补标题',
+    '      --proofread       一次做完：繁转简 + 全角标点 + 英文/日期 + 中英/单位空格 + 错别字 + 自动补标题',
     '      --simplify        只做繁体转简体',
     '      --auto-titles     缺少标题的章节读全章内容提炼（≤6 字，抽取式关键词）',
     '',    '',
@@ -904,7 +911,7 @@ function helpText() {
     '',
     '检查:',
     '      --fix             应用安全修复',
-    '      --fix-rules <ids> 指定修复规则，逗号分隔（T001,T006… 或 C001-C008）',
+    '      --fix-rules <ids> 指定修复规则，逗号分隔（T001,T006… 或 C001-C014）',
     '      --level <级别>    error | warn | info（默认 info）',
     '',
     '安全:',

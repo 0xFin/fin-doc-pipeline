@@ -18,7 +18,7 @@ import { cnToInt, classifyLine, parseDocument, findDuplicateNumbers } from '../s
 import { detectHeading, buildContext, romanToInt, DEFAULT_RULES } from '../src/rules.mjs';
 import { renderDocument, renderTitle, markdownMarker, DEFAULT_FORMAT, reflowParagraphs, normalizePunctuation, countText } from '../src/typography.mjs';
 import { mergeDocuments, dedupeParagraphs, renderMergeReport } from '../src/merge.mjs';
-import { lintDocument, lintRawText, fixDocument } from '../src/lint.mjs';
+import { lintDocument, lintRawText, fixDocument, fixRawText } from '../src/lint.mjs';
 import { toMarkdown, toHtml, guessMetaFromFilename, renderFormat, SUPPORTED_FORMATS } from '../src/converters.mjs';
 import { readZip } from '../src/zip.mjs';
 import { toDocx } from '../src/formats/docx.mjs';
@@ -154,6 +154,22 @@ group('parser', () => {
     assert.equal(hit.prefix, '番外');
     assert.equal(hit.num, 1);
     assert.equal(hit.subtitle, '最后');
+  });
+
+  test('prose that looks like a chapter is not a heading', () => {
+    assert.equal(classifyLine('第一回合的比赛开始了。'), null);
+    assert.equal(classifyLine('第一回合'), null);
+    assert.equal(classifyLine('第一节课很有意思。'), null);
+    assert.equal(classifyLine('第一章讲述了一个故事。'), null);
+    assert.equal(classifyLine('第一章 开端').kind, 'chapter');
+    assert.equal(classifyLine('第12回 风起').kind, 'chapter');
+  });
+
+  test('parenthesised list numbers are sections', () => {
+    const hit = classifyLine('（三）小节标题');
+    assert.equal(hit.kind, 'section');
+    assert.equal(hit.num, 3);
+    assert.equal(hit.subtitle, '小节标题');
   });
 
   test('parses front matter, specials and chapters', () => {
@@ -335,12 +351,48 @@ group('lint', () => {
   });
 
   test('raw text checks', () => {
-    const issues = lintRawText('\uFEFFa\r\nb\n\n\n\nc   \n');
+    const issues = lintRawText('\uFEFFa\r\nb\n\n\n\nc   \n\td\n');
     const ids = issues.map((i) => i.id);
-    assert.ok(ids.includes('R001'));
-    assert.ok(ids.includes('R002'));
-    assert.ok(ids.includes('R003'));
-    assert.ok(ids.includes('R004'));
+    ['R001', 'R002', 'R003', 'R004', 'R005'].forEach((id) => assert.ok(ids.includes(id), id));
+  });
+
+  test('raw text repairs normalise line endings and whitespace', () => {
+    const res = fixRawText('\uFEFF第一章\r\n\r\n\r\n\r\n正文。   \r\n\t第二段\r\n', { bom: true });
+    assert.ok(!res.text.startsWith('\uFEFF'));
+    assert.ok(!res.text.includes('\r'));
+    assert.ok(!/[ \t]+\n/.test(res.text));
+    assert.ok(!/\n\t/.test(res.text));
+    const ids = res.fixed.map((f) => f.id);
+    ['R001', 'R002', 'R003', 'R004', 'R005'].forEach((id) => assert.ok(ids.includes(id), id));
+  });
+
+  test('detects and fixes Chinese-Latin spacing', () => {
+    const doc = parseDocument('[第1章]\n他打开MacBook说hello世界');
+    assert.ok(lintDocument(doc).issues.some((i) => i.id === 'C010'));
+    const fixed = fixDocument(doc, { rules: ['C010'] });
+    assert.equal(fixed.doc.chapters[0].paragraphs[0], '他打开 MacBook 说 hello 世界');
+  });
+
+  test('number-unit spacing leaves percent alone', () => {
+    const doc = parseDocument('[第1章]\n重量5kg，进度50%。');
+    assert.ok(lintDocument(doc).issues.some((i) => i.id === 'C012'));
+    const fixed = fixDocument(doc, { rules: ['C012'] });
+    assert.equal(fixed.doc.chapters[0].paragraphs[0], '重量5 kg，进度50%。');
+  });
+
+  test('line-start punctuation is reported but never rewritten', () => {
+    const doc = parseDocument('[第1章]\n”他走了。\n“这是对话。”');
+    const c011 = lintDocument(doc).issues.filter((i) => i.id === 'C011');
+    assert.equal(c011.length, 1);
+    const fixed = fixDocument(doc, { rules: ['C011'] });
+    assert.equal(fixed.fixed.length, 0);
+  });
+
+  test('detects nested book titles, brackets and quotes', () => {
+    const doc = parseDocument('[第1章]\n《小说《名称》嵌套》\n（外层（内层））\n“他说“你好””');
+    const ids = lintDocument(doc).issues.map((i) => i.id);
+    assert.ok(ids.includes('C013'));
+    assert.ok(ids.includes('C014'));
   });
 
   test('zero width characters are removed by default clean', () => {
@@ -404,6 +456,16 @@ group('cli', () => {
     const json = JSON.parse(run(['inspect', input, '--json']));
     assert.equal(json.command, 'inspect');
     assert.equal(json.files[0].chapters, 1);
+  });
+
+  test('check --fix repairs raw text problems', () => {
+    const input = fixture('cli-raw.txt', '\uFEFF第一章 开端\r\n\r\n\r\n\r\n正文。   \r\n\t第二段。\r\n');
+    const out = path.join(TMP, 'cli-raw-fixed.txt');
+    const stdout = run(['check', input, '--fix', '-o', out]);
+    assert.ok(stdout.includes('R001'));
+    const bytes = fs.readFileSync(out);
+    assert.ok(!bytes.toString('utf8').startsWith('\uFEFF'));
+    assert.ok(!bytes.includes(13));
   });
 
   test('convert emits markdown and html', () => {

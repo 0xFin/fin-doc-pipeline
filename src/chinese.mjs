@@ -122,11 +122,22 @@ const FULLWIDTH_ALNUM = /[\uFF10-\uFF19\uFF21-\uFF3A\uFF41-\uFF5A]/g;
  * Half-width numbers and letters, title case for plain English words and upper
  * case for the acronyms and product names the convention lists.
  */
+const UNIT_CASE = new Map([
+  ['kg', 'kg'], ['km', 'km'], ['cm', 'cm'], ['mm', 'mm'], ['ml', 'ml'],
+  ['gb', 'GB'], ['mb', 'MB'], ['kb', 'KB'], ['tb', 'TB'],
+  ['hz', 'Hz'], ['mhz', 'MHz'], ['ghz', 'GHz'], ['kw', 'kW'], ['mah', 'mAh'],
+  ['w', 'W'], ['v', 'V'], ['a', 'A'],
+]);
+
 export function normalizeEnglishWords(text) {
   let s = String(text === null || text === undefined ? '' : text);
   s = s.replace(FULLWIDTH_ALNUM, (ch) => String.fromCharCode(ch.charCodeAt(0) - 0xfee0));
-  s = s.replace(/[A-Za-z][A-Za-z']*/g, (word) => {
+  s = s.replace(/[A-Za-z][A-Za-z']*/g, (word, offset, whole) => {
     const lower = word.toLowerCase();
+    // A unit right after a number keeps its conventional case: 5kg, 100km.
+    if (/(\d)\s*$/.test(whole.slice(0, offset)) && UNIT_CASE.has(lower)) {
+      return UNIT_CASE.get(lower);
+    }
     if (PRODUCT_CASE.has(lower)) return PRODUCT_CASE.get(lower);
     if (ACRONYMS.has(lower)) return lower.toUpperCase();
     if (word.length > 1 && word === lower) return word.charAt(0).toUpperCase() + word.slice(1);
@@ -285,7 +296,7 @@ export function proofreadText(text, options) {
 }
 
 /** Rule ids understood by fixDocument for the proofreading pass. */
-export const PROOFREAD_RULES = ['C001', 'C002', 'C003', 'C004', 'C005', 'C006', 'C007'];
+export const PROOFREAD_RULES = ['C001', 'C002', 'C003', 'C004', 'C005', 'C006', 'C007', 'C010', 'C012'];
 
 /**
  * Common wording problems. These are reported, never rewritten: deciding
@@ -309,4 +320,67 @@ export function findGrammarIssues(text) {
     if (match) found.push({ text: match[0], message: pair[1], index: match.index });
   }
   return found;
+}
+
+/* ---------------------------------------------------------
+   Typography spacing and nesting (C010-C014)
+   --------------------------------------------------------- */
+
+/**
+ * One space between Chinese and Latin letters. Digits are deliberately left
+ * alone: "第1章", "2026年" must not be broken apart.
+ */
+export function spaceCjkLatin(text) {
+  const source = String(text === null || text === undefined ? '' : text);
+  return source
+    .replace(/([\u4e00-\u9fff])([A-Za-z])/g, '$1 $2')
+    .replace(/([A-Za-z])([\u4e00-\u9fff])/g, '$1 $2');
+}
+
+/** True when C010 would change the text. */
+export function hasCjkLatinIssue(text) {
+  const source = String(text === null || text === undefined ? '' : text);
+  return spaceCjkLatin(source) !== source;
+}
+
+/** Units that take a space before them in Chinese typography. */
+const UNIT_PATTERN = /(\d)\s*(GHz|MHz|kg|km|cm|mm|ml|GB|MB|KB|TB|kW|mAh|Hz|W|V|A)(?![A-Za-z])/g;
+
+/** "5kg" becomes "5 kg"; percent and temperature are left alone by design. */
+export function spaceNumberUnits(text) {
+  const source = String(text === null || text === undefined ? '' : text);
+  return source.replace(UNIT_PATTERN, '$1 $2');
+}
+
+/** True when C012 would change the text. */
+export function hasNumberUnitIssue(text) {
+  const source = String(text === null || text === undefined ? '' : text);
+  return spaceNumberUnits(source) !== source;
+}
+
+/** Nested book-title marks: 《...《...》...》 should use 〈〉 inside. */
+export function findNestedBookTitles(text) {
+  const match = String(text === null || text === undefined ? '' : text).match(/《[^》]{0,40}《/);
+  return match ? { index: match.index, text: match[0] } : null;
+}
+
+/** Nested full-width parentheses: use a different bracket level inside. */
+export function findNestedParentheses(text) {
+  const match = String(text === null || text === undefined ? '' : text).match(/（[^）]{0,40}（/);
+  return match ? { index: match.index, text: match[0] } : null;
+}
+
+/** A second opening double quote before the first one closes. */
+export function findNestedQuotes(text) {
+  const source = String(text === null || text === undefined ? '' : text);
+  let depth = 0;
+  for (let i = 0; i < source.length; i += 1) {
+    if (source[i] === '“') {
+      if (depth > 0) return { index: i, text: source.slice(Math.max(0, i - 8), i + 8) };
+      depth += 1;
+    } else if (source[i] === '”') {
+      depth = Math.max(0, depth - 1);
+    }
+  }
+  return null;
 }

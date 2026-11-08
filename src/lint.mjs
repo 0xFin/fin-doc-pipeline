@@ -15,6 +15,8 @@ import {
   toSimplified, traditionalChars, normalizeQuotes, collapseRepeats,
   normalizeEnglishWords, normalizeDateAndTime, hasCaseIssue, hasDateIssue,
   applyTypos, findTypos, findRepeats, findGrammarIssues, PROOFREAD_RULES,
+  spaceCjkLatin, hasCjkLatinIssue, spaceNumberUnits, hasNumberUnitIssue,
+  findNestedBookTitles, findNestedParentheses, findNestedQuotes,
 } from './chinese.mjs';
 import { fillChapterTitles } from './titles.mjs';
 
@@ -34,7 +36,7 @@ export const CLEAN_FIXES = ['T001', 'T002', 'T003', 'T017', 'T018'];
  */
 export const SAFE_FIXES = [
   'T001', 'T002', 'T003', 'T006', 'T007', 'T016', 'T017', 'T018',
-  'C001', 'C002', 'C003', 'C004', 'C005', 'C006', 'C007',
+  'C001', 'C002', 'C003', 'C004', 'C005', 'C006', 'C007', 'C010', 'C012',
 ];
 
 /** Applied by --proofread: the full Simplified Chinese cleanup chain. */
@@ -160,6 +162,21 @@ export function lintDocument(doc, options) {
       if (grammar.length) {
         push(makeIssue('C009', 'info', '疑似语病：' + grammar.map((g) => g.message).join('；'), at));
       }
+      if (hasCjkLatinIssue(p)) {
+        push(makeIssue('C010', 'info', '中文与英文之间缺少空格', at, { fixable: true }));
+      }
+      if (/^[，。、；：？！）】》」』”’]/.test(p)) {
+        push(makeIssue('C011', 'info', '段首出现收尾标点，可能是硬换行残渣', at));
+      }
+      if (hasNumberUnitIssue(p)) {
+        push(makeIssue('C012', 'info', '数字与单位之间缺少空格', at, { fixable: true }));
+      }
+      if (findNestedBookTitles(p) || findNestedParentheses(p)) {
+        push(makeIssue('C013', 'info', '书名号或括号嵌套，内层宜换用不同层级符号', at));
+      }
+      if (findNestedQuotes(p)) {
+        push(makeIssue('C014', 'info', '双引号内再套双引号，内层宜用单引号', at));
+      }
 
       // Quotes routinely span paragraphs in Chinese dialogue, so balance is
       // checked per chapter rather than per paragraph.
@@ -226,22 +243,85 @@ export function lintDocument(doc, options) {
   return { issues, counts };
 }
 
-/** Lint raw text before parsing: line endings, BOM, blank line runs. */
-export function lintRawText(text) {
-  const issues = [];
-  if (text.startsWith('\uFEFF')) issues.push(makeIssue('R001', 'warn', '文件带 UTF-8 BOM', {}));
-  const crlf = (text.match(/\r\n/g) || []).length;
-  const cr = (text.match(/\r(?!\n)/g) || []).length;
-  if (crlf || cr) issues.push(makeIssue('R002', 'info', '混合或非 Unix 换行（CRLF ' + crlf + ' 处，CR ' + cr + ' 处）', {}));
-  if (/\n{3,}/.test(text)) issues.push(makeIssue('R003', 'info', '存在连续 3 行以上空行', {}, { fixable: true }));
+/** Count findings by severity. */
+export function countIssues(issues) {
+  const counts = { error: 0, warn: 0, info: 0 };
+  for (const issue of issues) counts[issue.severity] += 1;
+  return counts;
+}
 
-  const lines = text.split('\n');
+/**
+ * Lint raw text before parsing: BOM, line endings, blank line runs, trailing
+ * spaces, tab indentation.
+ *
+ * The BOM is removed while decoding, so the caller passes detection.bom when
+ * it wants R001 to be reported. Checks run on a newline-normalised copy so a
+ * CRLF file is not silently exempt from R003 and R004.
+ */
+export function lintRawText(text, options) {
+  const opts = options || {};
+  const source = String(text === null || text === undefined ? '' : text);
+  const issues = [];
+
+  if (opts.bom === true || source.startsWith('\uFEFF')) {
+    issues.push(makeIssue('R001', 'warn', '文件带 UTF-8 BOM', {}, { fixable: true }));
+  }
+
+  const crlf = (source.match(/\r\n/g) || []).length;
+  const cr = (source.match(/\r(?!\n)/g) || []).length;
+  if (crlf || cr) {
+    issues.push(makeIssue('R002', 'info', '混合或非 Unix 换行（CRLF ' + crlf + ' 处，CR ' + cr + ' 处）', {}, { fixable: true }));
+  }
+
+  const normalized = source.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  if (/\n{3,}/.test(normalized)) {
+    issues.push(makeIssue('R003', 'info', '存在连续 3 行以上空行', {}, { fixable: true }));
+  }
+
+  const lines = normalized.split('\n');
   const trailing = lines.filter((l) => /[ \t]+$/.test(l)).length;
   if (trailing) issues.push(makeIssue('R004', 'info', '有 ' + trailing + ' 行以空白结尾', {}, { fixable: true }));
   const tabs = lines.filter((l) => l.startsWith('\t')).length;
   if (tabs) issues.push(makeIssue('R005', 'info', '有 ' + tabs + ' 行以 Tab 缩进', {}, { fixable: true }));
 
   return issues;
+}
+
+/**
+ * Repair the raw-text problems R001-R005. Structural output is regenerated
+ * afterwards, so this only has to normalise the input the parser sees.
+ */
+export function fixRawText(text, options) {
+  const opts = options || {};
+  let s = String(text === null || text === undefined ? '' : text);
+  const counter = new Map();
+  const bump = (id) => counter.set(id, (counter.get(id) || 0) + 1);
+
+  if (opts.bom === true || s.startsWith('\uFEFF')) {
+    s = s.replace(/^\uFEFF/, '');
+    bump('R001');
+  }
+  if (/\r/.test(s)) {
+    s = s.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+    bump('R002');
+  }
+  if (/\n{3,}/.test(s)) {
+    s = s.replace(/\n{3,}/g, '\n\n');
+    bump('R003');
+  }
+  if (/^[ \t]+$/m.test(s) || /[ \t]+$/m.test(s)) {
+    s = s.replace(/[ \t]+$/gm, '');
+    bump('R004');
+  }
+  if (/^\t+/m.test(s)) {
+    s = s.replace(/^\t+/gm, '');
+    bump('R005');
+  }
+
+  const fixed = Array.from(counter.entries()).map(function (entry) {
+    return { id: entry[0], count: entry[1] };
+  });
+  return { text: s, fixed };
 }
 
 /* =========================================================
@@ -274,6 +354,8 @@ export function fixDocument(doc, options) {
     if (rules.has('C005')) { const b = s; s = normalizeDateAndTime(s); if (s !== b) bump('C005'); }
     if (rules.has('C006')) { const b = s; s = applyTypos(s); if (s !== b) bump('C006'); }
     if (rules.has('C007')) { const b = s; s = s.replace(/([的了着过是在和与就也都又还而])\1+/g, '$1'); if (s !== b) bump('C007'); }
+    if (rules.has('C010')) { const b = s; s = spaceCjkLatin(s); if (s !== b) bump('C010'); }
+    if (rules.has('C012')) { const b = s; s = spaceNumberUnits(s); if (s !== b) bump('C012'); }
 
     if (rules.has('T001')) { const before = s; s = s.replace(/\uFFFD/g, ''); if (s !== before) bump('T001'); }
     if (rules.has('T002')) {

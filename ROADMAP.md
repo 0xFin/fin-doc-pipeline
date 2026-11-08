@@ -32,7 +32,7 @@
 - [x] C013 书名号/括号嵌套（新增，仅提示）
 - [x] C014 全角引号嵌套（新增，仅提示）
 - [x] 测试（121 通过）、SKILL.md、README、CHANGELOG、构建 index.html
-- [ ] 发布 0.7.0（npm / GitHub Release / Pages / 技能目录同步）
+- [x] 发布 0.7.0（npm / GitHub Release / Pages / 技能目录同步）
 
 ## 下一批 0.7.1：A 类缺陷
 

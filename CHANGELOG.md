@@ -1,5 +1,27 @@
 # Changelog
 
+## 0.7.1 — 2026-11-10
+
+- The browser build now parses HTML and RTF instead of treating them as plain
+  text: markup is removed before the chapter parser runs, so tags and RTF
+  control words no longer end up in the output (src/input.mjs)
+- The browser build runs the raw-text checks and repairs R001–R005. The stats
+  table shows what was repaired and the check report can be downloaded
+- The check report lists rule ids, chapter/paragraph positions and excerpts.
+  The warning count is no longer always 0: lint used to run at error level only
+- Output encoding, BOM and line ending are now three controls in the page:
+  UTF-8 / UTF-16LE / UTF-16BE / Latin-1, with BOM and LF/CRLF. Text formats go
+  through src/output.mjs, so the page and the CLI write identical bytes
+- CLI: --encoding finally works (UTF-8 / UTF-16LE / UTF-16BE / Latin-1).
+  GBK, Big5 and GB18030 go through the system iconv when available and fail
+  with E_ENCODING otherwise, instead of silently writing UTF-8
+- CLI: format, merge and convert repair raw-text problems (BOM, CRLF, blank
+  line runs, trailing spaces, tab indentation) before parsing
+- A byte-for-byte parity test now guards the two fronts: for the same text and
+  the same output options the page pipeline and the CLI write identical bytes
+- 137 tests, 16 of them new: output encoding, input preparation, CLI encoding
+  round trips, the parity check and the page wiring
+
 ## 0.7.0 — 2026-11-08
 
 - Raw-text rules R001–R005 are part of the normal check report and are

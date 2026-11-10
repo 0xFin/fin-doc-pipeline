@@ -231,9 +231,10 @@ command line flags always win. Full example in
 
 ## Web version
 
-The browser build runs entirely locally: encoding detection, parsing, merging,
-proofreading, typesetting and all twelve export formats are inlined into one
-`index.html`, so it also works opened from disk, offline.
+The browser build runs entirely locally: encoding detection, HTML/RTF markup
+removal, raw-text repairs, parsing, merging, proofreading, typesetting, the
+check report and all twelve export formats are inlined into one `index.html`,
+so it also works opened from disk, offline.
 
 [![Web UI](assets/web-ui.jpg)](https://0xFin.github.io/fin-doc-pipeline/)
 
@@ -241,8 +242,11 @@ proofreading, typesetting and all twelve export formats are inlined into one
 - **Offline**: `index.html` (~200 KB), copy anywhere and double click
 - **Rebuild**: edit `web/index.template.html` or `web/app.mjs`, then `npm run build`
 
-> The browser build only takes text inputs. DOCX / EPUB / PDF *input* needs
+> The browser build takes text inputs (txt / md / html / rtf / json / csv…);
+> HTML and RTF are stripped of markup first. DOCX / EPUB / PDF *input* needs
 > decompression, so use the CLI; all twelve export formats work in the browser.
+> Output can be UTF-8 / UTF-16LE / UTF-16BE / Latin-1 with optional BOM and
+> CRLF; GBK, Big5 and GB18030 need the system iconv and are CLI only.
 
 ## Project layout
 

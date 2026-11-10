@@ -230,14 +230,14 @@
   .download-link:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
 
   /* ===== 报告 ===== */
-  pre#report {
+  pre#report, pre#issues {
     background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm);
     padding: 16px; max-height: 480px; overflow: auto; font-size: 12.5px; line-height: 1.7;
     white-space: pre-wrap; word-break: break-all; color: var(--text-secondary);
     font-family: "JetBrains Mono", ui-monospace, monospace;
   }
-  pre#report::-webkit-scrollbar { width: 6px; }
-  pre#report::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  pre#report::-webkit-scrollbar, pre#issues::-webkit-scrollbar { width: 6px; }
+  pre#report::-webkit-scrollbar-thumb, pre#issues::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(8px); }
@@ -279,6 +279,11 @@
   }
   .file-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
   .file-item .meta { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .file-item .badge {
+    flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    padding: 2px 7px; border-radius: 5px; color: var(--accent);
+    background: var(--accent-light);
+  }
   .file-item .remove {
     flex-shrink: 0; border: none; background: none; color: var(--text-muted);
     cursor: pointer; font-size: 12px; padding: 3px 8px; border-radius: 6px;
@@ -399,7 +404,7 @@
     <input type="file" id="fileInput" multiple
            accept=".txt,.text,.md,.markdown,.html,.htm,.xhtml,.rtf,.json,.jsonl,.yaml,.yml,.xml,.csv,.tsv,.js,.mjs,.cjs,.ts,.rst,.ini,.conf,.log,.srt,.tex,.org">
     <p class="dropzone-title">拖拽文本到这里，或点击选择</p>
-    <p class="hint">可一次选择多个文件；编码自动识别（UTF-8 / UTF-16 / GBK / GB18030 / Big5）</p>
+    <p class="hint">可一次选择多个文件；编码自动识别（UTF-8 / UTF-16 / GBK / GB18030 / Big5）；HTML / RTF 会先去标记。DOCX / EPUB / PDF 请用命令行。</p>
   </div>
   <div class="file-list" id="fileList"></div>
 
@@ -457,6 +462,24 @@
 
 <div class="card">
   <h2>输出格式</h2>
+  <div class="grid3">
+    <div class="field">
+      <label for="outEncoding">输出编码</label>
+      <select id="outEncoding"></select>
+    </div>
+    <div class="field">
+      <label for="outEol">换行符</label>
+      <select id="outEol">
+        <option value="lf">LF（Unix / macOS）</option>
+        <option value="crlf">CRLF（Windows）</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>BOM</label>
+      <div class="chips"><label class="chip"><input type="checkbox" id="outBom"> 写入 BOM</label></div>
+    </div>
+  </div>
+  <p class="note-line">GBK / Big5 / GB18030 输出需要系统 iconv，浏览器版不支持，请用命令行 <code>--encoding</code>；UTF-16 默认带 BOM。</p>
   <div class="chips" id="formats"></div>
   <div class="row-actions">
     <button class="btn-primary" id="btnProcess">开始处理</button>
@@ -479,8 +502,16 @@
 </div>
 
 <div class="card" id="reportBox" hidden>
-  <h2>处理报告</h2>
+  <h2>合并报告</h2>
   <pre id="report"></pre>
+</div>
+
+<div class="card" id="issuesBox" hidden>
+  <div class="preview-header">
+    <h2>检查报告</h2>
+    <button type="button" class="download-link" id="btnIssues">下载报告</button>
+  </div>
+  <pre id="issues"></pre>
 </div>
 
 <script>
@@ -518,7 +549,7 @@
 </script>
 
 <script>
-/* Generated bundle: 20 modules inlined by scripts/build-web.mjs. */
+/* Generated bundle: 24 modules inlined by scripts/build-web.mjs. */
 (function () {
 'use strict';
 var __registry = Object.create(null);
@@ -837,6 +868,146 @@ function describeDetection(result) {
 }
 
 return { COMMON_ZH, decodeWith, scoreText, detectEncoding, encodeText, describeDetection };
+});
+
+__define('src/xml.mjs', function () {
+'use strict';
+/**
+ * xml.mjs — the small amount of XML handling the loaders need.
+ *
+ * DOCX and EPUB are XML inside ZIP. A full parser is unnecessary: we only need
+ * text extraction, entity decoding and a few attribute lookups, all of which
+ * are safe to do with well anchored regular expressions.
+ */
+
+const ENTITIES = {
+  amp: '&', lt: '<', gt: '>', quot: '"', apos: "'", nbsp: '\u00a0',
+};
+
+/** Decode the five XML entities plus numeric character references. */
+function decodeEntities(text) {
+  return String(text).replace(/&(#x?[0-9a-fA-F]+|[a-zA-Z]+);/g, function (match, body) {
+    if (body.charAt(0) === '#') {
+      const hex = body.charAt(1) === 'x' || body.charAt(1) === 'X';
+      const value = parseInt(hex ? body.slice(2) : body.slice(1), hex ? 16 : 10);
+      if (!Number.isFinite(value)) return match;
+      try { return String.fromCodePoint(value); } catch (err) { return match; }
+    }
+    const known = ENTITIES[body.toLowerCase()];
+    return known === undefined ? match : known;
+  });
+}
+
+/** Read an attribute value from a tag string. */
+function attribute(tag, name) {
+  const re = new RegExp(name + '\\s*=\\s*"([^"]*)"');
+  const m = String(tag).match(re);
+  if (m) return decodeEntities(m[1]);
+  const single = String(tag).match(new RegExp(name + "\\s*=\\s*'([^']*)'"));
+  return single ? decodeEntities(single[1]) : null;
+}
+
+/** Extract the text of an element by tag name (first match). */
+function elementText(xml, tagName) {
+  const m = String(xml).match(new RegExp('<' + tagName + '(?:\\s[^>]*)?>([\\s\\S]*?)</' + tagName + '>'));
+  return m ? decodeEntities(m[1].replace(/<[^>]+>/g, '').trim()) : '';
+}
+
+/** Normalise whitespace produced by tag stripping. */
+function tidyText(text) {
+  return String(text)
+    .replace(/\r\n?/g, '\n')
+    .replace(/[ \t]+/g, ' ')
+    .replace(/ *\n */g, '\n')
+    .replace(/\n{3,}/g, '\n\n')
+    .trim();
+}
+
+return { decodeEntities, attribute, elementText, tidyText };
+});
+
+__define('src/loaders/markup.mjs', function () {
+'use strict';
+const __m0 = __require('src/xml.mjs');
+const decodeEntities = __m0.decodeEntities;
+const tidyText = __m0.tidyText;
+
+/**
+ * markup.mjs — plain text extraction for markup-ish inputs.
+ *
+ * HTML and RTF are not containers, but they are not "plain text" either: their
+ * markup has to go before the chapter parser can see anything useful.
+ */
+
+
+
+/** Strip scripts and styles, then turn block tags into line breaks. */
+function htmlToPlainText(html) {
+  let body = String(html)
+    .replace(/<!--[\s\S]*?-->/g, '')
+    .replace(/<(script|style)[\s\S]*?<\/\1>/gi, '');
+
+  const titleMatch = body.match(/<title[^>]*>([\s\S]*?)<\/title>/i);
+  const title = titleMatch ? tidyText(decodeEntities(titleMatch[1].replace(/<[^>]+>/g, ''))) : '';
+
+  const bodyMatch = body.match(/<body[^>]*>([\s\S]*?)<\/body>/i);
+  body = bodyMatch ? bodyMatch[1] : body;
+
+  const lines = [];
+  const headingRe = /<h([1-6])[^>]*>([\s\S]*?)<\/h\1>/gi;
+  let lastIndex = 0;
+  let m;
+  const blocks = [];
+  let pendingLevel = 1;
+
+  while ((m = headingRe.exec(body)) !== null) {
+    blocks.push({ type: 'text', html: body.slice(lastIndex, m.index) });
+    blocks.push({ type: 'heading', html: m[2], level: Number(m[1]) });
+    lastIndex = m.index + m[0].length;
+  }
+  blocks.push({ type: 'text', html: body.slice(lastIndex) });
+
+  for (const block of blocks) {
+    let fragment = block.html
+      .replace(/<br\s*\/?>/gi, '\n')
+      .replace(/<\/(p|div|li|tr|blockquote|pre)>/gi, '\n')
+      .replace(/<[^>]+>/g, '');
+    fragment = tidyText(decodeEntities(fragment));
+    if (!fragment) continue;
+    if (block.type === 'heading') {
+      lines.push('');
+      lines.push('#'.repeat(Math.min(6, block.level || 1)) + ' ' + fragment);
+    } else {
+      lines.push(fragment);
+    }
+  }
+
+  return { text: tidyText(lines.join('\n')), meta: title ? { title } : {} };
+}
+
+/** Decode RTF escapes: \uN?, \'hh, \\ \{ \} and \par. */
+function rtfToPlainText(rtf) {
+  let text = String(rtf)
+    .replace(/\\'([0-9a-fA-F]{2})/g, function (_, hex) {
+      return String.fromCharCode(parseInt(hex, 16));
+    })
+    .replace(/\\u(-?\d+)\??/g, function (_, num) {
+      let cp = parseInt(num, 10);
+      if (cp < 0) cp += 65536;
+      try { return String.fromCodePoint(cp); } catch (err) { return ''; }
+    })
+    .replace(/\\par[d]?\b/g, '\n')
+    .replace(/\\line\b/g, '\n')
+    .replace(/\\tab\b/g, ' ')
+    .replace(/\{\\\*[\s\S]*?\}/g, '')
+    .replace(/\\[a-zA-Z]+-?\d* ?/g, '')
+    .replace(/\\([\\{}])/g, '$1')
+    .replace(/[{}]/g, '');
+
+  return { text: tidyText(text), meta: {} };
+}
+
+return { htmlToPlainText, rtfToPlainText };
 });
 
 __define('src/rules.mjs', function () {
@@ -1482,519 +1653,6 @@ function groupCharCount(chapters) {
 }
 
 return { cnToInt, DEFAULT_SPECIALS, stripBrackets, stripHeadingMarks, GROUP_PREFIXES, CLASSIFY_RULES, classifyLine, chapterKey, parseDocument, documentStats, findDuplicateNumbers, findMissingNumbers, chapterCharCount, groupCharCount };
-});
-
-__define('src/merge.mjs', function () {
-'use strict';
-const __m0 = __require('src/parser.mjs');
-const chapterCharCount = __m0.chapterCharCount;
-const chapterKey = __m0.chapterKey;
-const stripBrackets = __m0.stripBrackets;
-
-/**
- * merge.mjs — deduplicate and merge several parsed documents.
- *
- * Three levels of duplication are handled, in this order:
- *
- *   1. file level      identical files (after whitespace normalisation)
- *   2. chapter level   the same (group, number) present in several files
- *   3. paragraph level identical paragraphs inside the chosen chapter
- *
- * A chapter number may legitimately repeat *inside one file* (e.g. "第17章
- * 上/中/下"). Such chapters are treated as sequential parts and are never
- * dropped; only whole files compete with each other.
- *
- * The provenance of every decision is recorded in a report object. That report
- * is written to a separate .report.md file and is never embedded in the book.
- */
-
-
-
-const DEFAULT_MERGE = {
-  /**
-   * "versions" treats every input as another edition of the same book and picks
-   * the best copy of each chapter. "concat" keeps every input intact and simply
-   * joins them, which is what you want for a collection of different books.
-   */
-  mode: 'versions',
-  /** How to choose between competing versions of the same chapter. */
-  pick: 'longest',
-  /** In concat mode, renumber chapters sequentially. */
-  renumber: false,
-  /** Detect and drop byte-identical files. */
-  fileDedupe: true,
-  /** Drop exact duplicate paragraphs inside the chosen chapter. */
-  paragraphDedupe: true,
-  /** Paragraphs shorter than this are never removed: "……" is legitimate. */
-  paragraphDedupeMinLength: 20,
-};
-
-/** Normalised fingerprint of a parsed document, whitespace insensitive. */
-function documentFingerprint(doc) {
-  const parts = [];
-  for (const p of doc.frontMatter) parts.push(p);
-  for (const c of doc.chapters) {
-    parts.push(c.rawTitle);
-    for (const p of c.paragraphs) parts.push(p);
-  }
-  return parts.join('').replace(/\s/g, '');
-}
-
-function totalChars(chapters) {
-  let n = 0;
-  for (const c of chapters) n += chapterCharCount(c);
-  return n;
-}
-
-/** Remove exact duplicate paragraphs, keeping the first occurrence. */
-function dedupeParagraphs(paragraphs, minLength) {
-  const min = typeof minLength === 'number' ? minLength : DEFAULT_MERGE.paragraphDedupeMinLength;
-  const seen = new Set();
-  const out = [];
-  let removed = 0;
-  for (const p of paragraphs) {
-    const key = p.replace(/\s/g, '');
-    if (key.length >= min) {
-      if (seen.has(key)) {
-        removed += 1;
-        continue;
-      }
-      seen.add(key);
-    }
-    out.push(p);
-  }
-  return { paragraphs: out, removed };
-}
-
-/** Build a readable candidate list for the report. */
-function candidatesOf(entries) {
-  return entries.map((e) => ({
-    label: e.label,
-    chars: totalChars(e.chapters),
-    parts: e.chapters.length,
-  }));
-}
-
-/**
- * Merge several parsed documents into one.
- * @param {Array<{label:string, doc:object, encoding?:string, path?:string}>} sources
- * @param {object} [options]
- * @returns {{doc: object, report: object}}
- */
-function mergeDocuments(sources, options) {
-  const opts = { ...DEFAULT_MERGE, ...(options || {}) };
-  const report = {
-    options: opts,
-    sources: sources.map((s) => ({
-      label: s.label,
-      path: s.path || null,
-      encoding: s.encoding || null,
-      chapters: s.doc.chapters.length,
-      chars: totalChars(s.doc.chapters),
-    })),
-    duplicateFiles: [],
-    frontMatter: null,
-    specials: [],
-    chapters: [],
-    paragraphDedupeRemoved: 0,
-    warnings: [],
-  };
-
-  /* ---------- 1. file level dedupe ---------- */
-  let active = [];
-  if (opts.fileDedupe) {
-    const seen = new Map();
-    for (const src of sources) {
-      const fp = documentFingerprint(src.doc);
-      if (fp && seen.has(fp)) {
-        seen.get(fp).dropped.push(src.label);
-      } else {
-        const entry = { kept: src.label, dropped: [] };
-        seen.set(fp, entry);
-        report.duplicateFiles.push(entry);
-        active.push(src);
-      }
-    }
-  } else {
-    active = sources.slice();
-  }
-
-  if (!active.length) {
-    return { doc: { frontMatter: [], chapters: [] }, report };
-  }
-
-  /* ---------- 1b. concat mode: no competition between files ---------- */
-  if (opts.mode === 'concat') {
-    const frontMatter = [];
-    const chapters = [];
-    for (const src of active) {
-      frontMatter.push(...(src.doc.frontMatter || []));
-      for (const c of src.doc.chapters) chapters.push({ ...c, source: src.label });
-    }
-
-    if (opts.renumber) {
-      const counters = new Map();
-      for (const c of chapters) {
-        if (c.kind !== 'chapter') continue;
-        const n = (counters.get(c.group) || 0) + 1;
-        counters.set(c.group, n);
-        c.num = n;
-      }
-    }
-
-    chapters.forEach((c, i) => { c.id = 'c-' + String(i + 1).padStart(3, '0'); });
-    report.mode = 'concat';
-    report.renumbered = Boolean(opts.renumber);
-    return {
-      doc: { frontMatter, chapters, hasChapters: chapters.some((c) => c.kind === 'chapter') },
-      report,
-    };
-  }
-
-  /* ---------- 1c. a single source is passed through untouched ---------- */
-  if (active.length === 1) {
-    const src = active[0];
-    const chapters = src.doc.chapters.map((c, i) => ({
-      ...c,
-      id: 'c-' + String(i + 1).padStart(3, '0'),
-      paragraphs: c.paragraphs.slice(),
-      sections: (c.sections || []).map((s) => ({ ...s, paragraphs: s.paragraphs.slice() })),
-    }));
-    report.mode = 'versions';
-    report.singleSource = src.label;
-    return {
-      doc: {
-        frontMatter: (src.doc.frontMatter || []).slice(),
-        chapters,
-        hasChapters: chapters.some((c) => c.kind === 'chapter'),
-      },
-      report,
-    };
-  }
-
-  report.mode = 'versions';
-
-  /* ---------- 2. front matter ---------- */
-  const frontCandidates = active
-    .map((s) => ({ label: s.label, text: (s.doc.frontMatter || []).join('\n') }))
-    .filter((c) => c.text.trim());
-  let frontMatter = [];
-  if (frontCandidates.length) {
-    const chosen = frontCandidates.reduce((a, b) => (b.text.length > a.text.length ? b : a));
-    frontMatter = (active.find((s) => s.label === chosen.label).doc.frontMatter || []).slice();
-    report.frontMatter = { chosen: chosen.label, candidates: frontCandidates.map((c) => ({ label: c.label, chars: c.text.length })) };
-  }
-
-  /* ---------- 3. specials ---------- */
-  const specialOrder = [];
-  const specialMap = new Map();
-  for (const src of active) {
-    for (const c of src.doc.chapters) {
-      if (c.kind !== 'special') continue;
-      const key = stripBrackets(c.rawTitle);
-      if (!specialMap.has(key)) {
-        specialMap.set(key, []);
-        specialOrder.push(key);
-      }
-      specialMap.get(key).push({ label: src.label, chapters: [c] });
-    }
-  }
-
-  const specialOut = [];
-  for (const key of specialOrder) {
-    const entries = specialMap.get(key);
-    let chosen;
-    if (entries.length === 1) {
-      chosen = entries[0];
-    } else if (opts.pick === 'first') {
-      chosen = entries[0];
-    } else {
-      chosen = entries.reduce((a, b) => (totalChars(b.chapters) > totalChars(a.chapters) ? b : a));
-    }
-    const src = active.find((s) => s.label === chosen.label);
-    const copy = { ...chosen.chapters[0], source: chosen.label };
-    specialOut.push(copy);
-    if (entries.length > 1) {
-      report.specials.push({ title: key, chosen: chosen.label, candidates: candidatesOf(entries) });
-    }
-  }
-
-  /* ---------- 4. volume headings ---------- */
-  const volumeMap = new Map();
-  for (const src of active) {
-    for (const c of src.doc.chapters) {
-      if (c.kind !== 'volume') continue;
-      if (!volumeMap.has(c.num)) volumeMap.set(c.num, { label: src.label, chapters: [c] });
-    }
-  }
-  const volumes = Array.from(volumeMap.values())
-    .map((v) => ({ ...v.chapters[0], source: v.label }))
-    .sort((a, b) => (a.num === null ? 0 : a.num) - (b.num === null ? 0 : b.num));
-
-  /* ---------- 5. chapters ---------- */
-  /** key -> [{label, chapters: []}] in source order, parts in document order */
-  const chapterMap = new Map();
-  const groupOrder = [];
-  for (const src of active) {
-    for (const c of src.doc.chapters) {
-      if (c.kind !== 'chapter') continue;
-      const key = chapterKey(c);
-      if (!chapterMap.has(key)) {
-        chapterMap.set(key, { group: c.group, num: c.num, entries: [] });
-      }
-      const bucket = chapterMap.get(key);
-      const last = bucket.entries[bucket.entries.length - 1];
-      if (last && last.label === src.label) last.chapters.push(c);
-      else bucket.entries.push({ label: src.label, chapters: [c] });
-      if (!groupOrder.includes(c.group)) groupOrder.push(c.group);
-    }
-  }
-
-  const mergedChapters = [];
-  for (const [key, bucket] of chapterMap) {
-    const entries = bucket.entries;
-    let chosen;
-    let reason;
-    if (entries.length === 1) {
-      chosen = entries[0];
-      reason = 'only-source';
-    } else if (opts.pick === 'first') {
-      chosen = entries[0];
-      reason = 'pick-first';
-    } else {
-      chosen = entries.reduce((a, b) => (totalChars(b.chapters) > totalChars(a.chapters) ? b : a));
-      reason = 'longest';
-    }
-
-    const parts = chosen.chapters.map((c) => ({
-      ...c,
-      paragraphs: c.paragraphs.slice(),
-      sections: (c.sections || []).map((s) => ({
-        ...s,
-        paragraphs: s.paragraphs.slice(),
-      })),
-      source: chosen.label,
-    }));
-
-    if (entries.length > 1) {
-      const subtitles = entries
-        .map((e) => e.chapters.map((c) => c.subtitle).filter(Boolean).join(' / '))
-        .filter(Boolean);
-      const titleMismatch = subtitles.length > 1 && new Set(subtitles).size === subtitles.length;
-      report.chapters.push({
-        key,
-        group: bucket.group,
-        num: bucket.num,
-        chosen: chosen.label,
-        reason,
-        candidates: candidatesOf(entries),
-        titleMismatch,
-      });
-    }
-
-    mergedChapters.push({ key, group: bucket.group, num: bucket.num, parts });
-  }
-
-  /* ---------- 6. paragraph dedupe + flatten ---------- */
-  const flat = [];
-  for (const entry of mergedChapters) {
-    if (entry.parts.length === 1) {
-      const single = entry.parts[0];
-      let paragraphs = single.paragraphs;
-      if (opts.paragraphDedupe) {
-        const res = dedupeParagraphs(paragraphs, opts.paragraphDedupeMinLength);
-        paragraphs = res.paragraphs;
-        report.paragraphDedupeRemoved += res.removed;
-      }
-      const sections = (single.sections || []).map((section) => {
-        if (!opts.paragraphDedupe) return section;
-        const res = dedupeParagraphs(section.paragraphs, opts.paragraphDedupeMinLength);
-        report.paragraphDedupeRemoved += res.removed;
-        return { ...section, paragraphs: res.paragraphs };
-      });
-      flat.push({ ...single, key: entry.key, paragraphs, sections });
-      continue;
-    }
-
-    // Multi-part chapter: keep every part in order, as one chapter block.
-    const combined = [];
-    for (const part of entry.parts) combined.push(...part.paragraphs);
-    let paragraphs = combined;
-    if (opts.paragraphDedupe) {
-      const res = dedupeParagraphs(paragraphs, opts.paragraphDedupeMinLength);
-      paragraphs = res.paragraphs;
-      report.paragraphDedupeRemoved += res.removed;
-    }
-    flat.push({
-      ...entry.parts[0],
-      key: entry.key,
-      id: entry.parts[0].id,
-      subtitle: entry.parts.map((p) => p.subtitle).filter(Boolean).join(' / '),
-      paragraphs,
-      sections: entry.parts.reduce((acc, part) => acc.concat(part.sections || []), []),
-      multiPart: entry.parts.length,
-      source: entry.parts[0].source,
-    });
-  }
-
-  /* ---------- 7. ordering: follow the most complete source ---------- */
-  // Hanging every kind of block in its own pile (specials, then volumes, then
-  // chapters) scrambles a book whose parts interleave, so walk the reference
-  // document and place each block where it originally sat.
-  const base = active.reduce((a, b) => (b.doc.chapters.length > a.doc.chapters.length ? b : a));
-  report.baseSource = base.label;
-
-  const specialByTitle = new Map(specialOut.map((c) => [stripBrackets(c.rawTitle), c]));
-  const volumeByNum = new Map(volumes.map((c) => [c.num, c]));
-  const flatByKey = new Map(flat.map((c) => [c.key, c]));
-
-  const ordered = [];
-  const placed = new Set();
-  const place = (block) => {
-    if (!block) return;
-    ordered.push(block);
-  };
-
-  for (const c of base.doc.chapters) {
-    if (c.kind === 'special') {
-      const key = stripBrackets(c.rawTitle);
-      if (placed.has('s:' + key)) continue;
-      placed.add('s:' + key);
-      place(specialByTitle.get(key));
-    } else if (c.kind === 'volume') {
-      if (placed.has('v:' + c.num)) continue;
-      placed.add('v:' + c.num);
-      place(volumeByNum.get(c.num));
-    } else if (c.kind === 'chapter') {
-      const key = chapterKey(c);
-      if (placed.has('c:' + key)) continue;
-      placed.add('c:' + key);
-      place(flatByKey.get(key));
-    }
-  }
-
-  // Blocks that only exist in the other sources go last, keeping their own order.
-  for (const c of specialOut) if (!placed.has('s:' + stripBrackets(c.rawTitle))) ordered.push(c);
-  for (const v of volumes) if (!placed.has('v:' + v.num)) ordered.push(v);
-  for (const c of flat) if (!placed.has('c:' + c.key)) ordered.push(c);
-
-  // Stable ids after the merge.
-  ordered.forEach((c, i) => {
-    c.id = 'c-' + String(i + 1).padStart(3, '0');
-  });
-
-  /* ---------- 8. warnings ---------- */
-  for (const src of active) {
-    const perKey = new Map();
-    for (const c of src.doc.chapters) {
-      if (c.kind !== 'chapter') continue;
-      const k = chapterKey(c);
-      perKey.set(k, (perKey.get(k) || 0) + 1);
-    }
-    for (const [k, n] of perKey) {
-      if (n > 1) report.warnings.push(src.label + ' 中 ' + k + ' 出现 ' + n + ' 次，已作为分段章节保留');
-    }
-  }
-
-  if (report.chapters.length) {
-    const mismatched = report.chapters.filter((c) => c.titleMismatch);
-    if (mismatched.length >= 3 && mismatched.length >= report.chapters.length / 2) {
-      report.warnings.push(
-        '多个文件的同名章节标题几乎都不同（' + mismatched.length + '/' + report.chapters.length +
-        '），这些文件可能是不同的书而不是同一本书的不同版本；如确为不同书，请使用 --merge-mode concat'
-      );
-    }
-    const choices = new Map();
-    for (const c of report.chapters) choices.set(c.chosen, (choices.get(c.chosen) || 0) + 1);
-    if (choices.size > 1 && active.length > 1) {
-      const summary = Array.from(choices.entries()).map(([k, v]) => k + ' ' + v + ' 章').join('，');
-      report.warnings.push('章节择优结果混合了多个来源：' + summary + '（详见报告）');
-    }
-  }
-
-  const doc = {
-    frontMatter,
-    chapters: ordered,
-    hasChapters: ordered.some((c) => c.kind === 'chapter'),
-  };
-
-  return { doc, report };
-}
-
-/** Render the merge report as Markdown. Never part of the book output. */
-function renderMergeReport(report) {
-  const lines = [];
-  lines.push('# 合并报告');
-  lines.push('');
-  lines.push('## 来源文件');
-  lines.push('');
-  lines.push('| 文件 | 编码 | 章节 | 正文字数 |');
-  lines.push('| --- | --- | --- | --- |');
-  for (const s of report.sources) {
-    lines.push('| ' + s.label + ' | ' + (s.encoding || '-') + ' | ' + s.chapters + ' | ' + s.chars + ' |');
-  }
-  lines.push('');
-
-  if (report.duplicateFiles.length) {
-    const dropped = report.duplicateFiles.filter((d) => d.dropped.length);
-    if (dropped.length) {
-      lines.push('## 重复文件（内容完全相同）');
-      lines.push('');
-      for (const d of dropped) {
-        lines.push('- 保留 ' + d.kept + '，忽略 ' + d.dropped.join('、'));
-      }
-      lines.push('');
-    }
-  }
-
-  if (report.frontMatter && report.frontMatter.candidates.length > 1) {
-    lines.push('## 前言取舍');
-    lines.push('');
-    lines.push('采用：' + report.frontMatter.chosen);
-    for (const c of report.frontMatter.candidates) lines.push('- ' + c.label + '：' + c.chars + ' 字');
-    lines.push('');
-  }
-
-  if (report.specials.length) {
-    lines.push('## 特殊篇目取舍');
-    lines.push('');
-    for (const s of report.specials) {
-      lines.push('- ' + s.title + '：采用 ' + s.chosen + '（' + s.candidates.map((c) => c.label + ' ' + c.chars + ' 字').join(' / ') + '）');
-    }
-    lines.push('');
-  }
-
-  if (report.chapters.length) {
-    lines.push('## 章节取舍');
-    lines.push('');
-    lines.push('| 章节 | 采用 | 依据 | 候选（字数） |');
-    lines.push('| --- | --- | --- | --- |');
-    for (const c of report.chapters) {
-      const label = (c.group === 'main' ? '' : c.group) + '第' + c.num + '章';
-      const cands = c.candidates.map((x) => x.label + ' ' + x.chars + (x.parts > 1 ? '(' + x.parts + '段)' : '')).join(' / ');
-      lines.push('| ' + label + ' | ' + c.chosen + ' | ' + c.reason + ' | ' + cands + ' |');
-    }
-    lines.push('');
-  }
-
-  if (report.paragraphDedupeRemoved) {
-    lines.push('## 段落去重');
-    lines.push('');
-    lines.push('移除完全重复段落 ' + report.paragraphDedupeRemoved + ' 段。');
-    lines.push('');
-  }
-
-  if (report.warnings.length) {
-    lines.push('## 提示');
-    lines.push('');
-    for (const w of report.warnings) lines.push('- ' + w);
-    lines.push('');
-  }
-
-  return lines.join('\n');
-}
-
-return { DEFAULT_MERGE, documentFingerprint, dedupeParagraphs, mergeDocuments, renderMergeReport };
 });
 
 __define('src/data/t2s.mjs', function () {
@@ -3207,6 +2865,613 @@ function renderLintReport(result) {
 }
 
 return { PROOFREAD_RULES, SEVERITY_ORDER, CLEAN_FIXES, SAFE_FIXES, PROOFREAD_FIXES, OPT_IN_FIXES, DEFAULT_AD_PATTERNS, lintDocument, countIssues, lintRawText, fixRawText, fixDocument, renderLintReport };
+});
+
+__define('src/input.mjs', function () {
+'use strict';
+const __m0 = __require('src/encoding.mjs');
+const detectEncoding = __m0.detectEncoding;
+const __m1 = __require('src/loaders/markup.mjs');
+const htmlToPlainText = __m1.htmlToPlainText;
+const rtfToPlainText = __m1.rtfToPlainText;
+const __m2 = __require('src/lint.mjs');
+const lintRawText = __m2.lintRawText;
+const fixRawText = __m2.fixRawText;
+
+/**
+ * input.mjs — turn raw bytes into text the parser can consume.
+ *
+ * Decoding, markup removal and the raw-text repairs (BOM, line endings, blank
+ * line runs, trailing spaces, tab indentation) live here so the browser build
+ * and the tests share one implementation. The CLI has its own file-aware reader
+ * because it also unpacks DOCX / EPUB / PDF containers, which need a zip reader;
+ * everything below the container layer is the same code.
+ */
+
+
+
+
+
+/** Lower-case extension of a file name, without the dot. */
+function extensionOf(name) {
+  const lower = String(name || '').toLowerCase();
+  const dot = lower.lastIndexOf('.');
+  return dot < 0 ? '' : lower.slice(dot + 1);
+}
+
+/**
+ * Format of a text input after decoding.
+ * Only markup needs work; everything else is used as is.
+ */
+function markupFormatOf(name) {
+  const ext = extensionOf(name);
+  if (ext === 'html' || ext === 'htm' || ext === 'xhtml') return 'html';
+  if (ext === 'rtf') return 'rtf';
+  return 'text';
+}
+
+/**
+ * Prepare one input file.
+ *
+ * @param {string} name file name, used only to pick the markup stripper
+ * @param {Uint8Array} bytes
+ * @param {{fixRaw?: boolean}} [options]
+ * @returns {{
+ *   text: string, rawText: string, format: string, meta: object,
+ *   encoding: string, label: string, confidence: number, bom: boolean,
+ *   rawIssues: Array, fixed: Array<{id: string, count: number}>
+ * }}
+ */
+function prepareInput(name, bytes, options) {
+  const opts = options || {};
+  const detection = detectEncoding(bytes);
+  const format = markupFormatOf(name);
+
+  let text = detection.text;
+  let meta = {};
+  if (format === 'html') {
+    const loaded = htmlToPlainText(text);
+    text = loaded.text;
+    meta = loaded.meta || {};
+  } else if (format === 'rtf') {
+    const loaded = rtfToPlainText(text);
+    text = loaded.text;
+    meta = loaded.meta || {};
+  }
+
+  const rawIssues = lintRawText(text, { bom: detection.bom });
+  const repaired = opts.fixRaw === false
+    ? { text, fixed: [] }
+    : fixRawText(text, { bom: detection.bom });
+
+  return {
+    text: repaired.text,
+    rawText: text,
+    format,
+    meta,
+    encoding: detection.encoding,
+    label: detection.label,
+    confidence: detection.confidence,
+    bom: detection.bom,
+    rawIssues,
+    fixed: repaired.fixed,
+  };
+}
+
+return { extensionOf, markupFormatOf, prepareInput };
+});
+
+__define('src/merge.mjs', function () {
+'use strict';
+const __m0 = __require('src/parser.mjs');
+const chapterCharCount = __m0.chapterCharCount;
+const chapterKey = __m0.chapterKey;
+const stripBrackets = __m0.stripBrackets;
+
+/**
+ * merge.mjs — deduplicate and merge several parsed documents.
+ *
+ * Three levels of duplication are handled, in this order:
+ *
+ *   1. file level      identical files (after whitespace normalisation)
+ *   2. chapter level   the same (group, number) present in several files
+ *   3. paragraph level identical paragraphs inside the chosen chapter
+ *
+ * A chapter number may legitimately repeat *inside one file* (e.g. "第17章
+ * 上/中/下"). Such chapters are treated as sequential parts and are never
+ * dropped; only whole files compete with each other.
+ *
+ * The provenance of every decision is recorded in a report object. That report
+ * is written to a separate .report.md file and is never embedded in the book.
+ */
+
+
+
+const DEFAULT_MERGE = {
+  /**
+   * "versions" treats every input as another edition of the same book and picks
+   * the best copy of each chapter. "concat" keeps every input intact and simply
+   * joins them, which is what you want for a collection of different books.
+   */
+  mode: 'versions',
+  /** How to choose between competing versions of the same chapter. */
+  pick: 'longest',
+  /** In concat mode, renumber chapters sequentially. */
+  renumber: false,
+  /** Detect and drop byte-identical files. */
+  fileDedupe: true,
+  /** Drop exact duplicate paragraphs inside the chosen chapter. */
+  paragraphDedupe: true,
+  /** Paragraphs shorter than this are never removed: "……" is legitimate. */
+  paragraphDedupeMinLength: 20,
+};
+
+/** Normalised fingerprint of a parsed document, whitespace insensitive. */
+function documentFingerprint(doc) {
+  const parts = [];
+  for (const p of doc.frontMatter) parts.push(p);
+  for (const c of doc.chapters) {
+    parts.push(c.rawTitle);
+    for (const p of c.paragraphs) parts.push(p);
+  }
+  return parts.join('').replace(/\s/g, '');
+}
+
+function totalChars(chapters) {
+  let n = 0;
+  for (const c of chapters) n += chapterCharCount(c);
+  return n;
+}
+
+/** Remove exact duplicate paragraphs, keeping the first occurrence. */
+function dedupeParagraphs(paragraphs, minLength) {
+  const min = typeof minLength === 'number' ? minLength : DEFAULT_MERGE.paragraphDedupeMinLength;
+  const seen = new Set();
+  const out = [];
+  let removed = 0;
+  for (const p of paragraphs) {
+    const key = p.replace(/\s/g, '');
+    if (key.length >= min) {
+      if (seen.has(key)) {
+        removed += 1;
+        continue;
+      }
+      seen.add(key);
+    }
+    out.push(p);
+  }
+  return { paragraphs: out, removed };
+}
+
+/** Build a readable candidate list for the report. */
+function candidatesOf(entries) {
+  return entries.map((e) => ({
+    label: e.label,
+    chars: totalChars(e.chapters),
+    parts: e.chapters.length,
+  }));
+}
+
+/**
+ * Merge several parsed documents into one.
+ * @param {Array<{label:string, doc:object, encoding?:string, path?:string}>} sources
+ * @param {object} [options]
+ * @returns {{doc: object, report: object}}
+ */
+function mergeDocuments(sources, options) {
+  const opts = { ...DEFAULT_MERGE, ...(options || {}) };
+  const report = {
+    options: opts,
+    sources: sources.map((s) => ({
+      label: s.label,
+      path: s.path || null,
+      encoding: s.encoding || null,
+      chapters: s.doc.chapters.length,
+      chars: totalChars(s.doc.chapters),
+    })),
+    duplicateFiles: [],
+    frontMatter: null,
+    specials: [],
+    chapters: [],
+    paragraphDedupeRemoved: 0,
+    warnings: [],
+  };
+
+  /* ---------- 1. file level dedupe ---------- */
+  let active = [];
+  if (opts.fileDedupe) {
+    const seen = new Map();
+    for (const src of sources) {
+      const fp = documentFingerprint(src.doc);
+      if (fp && seen.has(fp)) {
+        seen.get(fp).dropped.push(src.label);
+      } else {
+        const entry = { kept: src.label, dropped: [] };
+        seen.set(fp, entry);
+        report.duplicateFiles.push(entry);
+        active.push(src);
+      }
+    }
+  } else {
+    active = sources.slice();
+  }
+
+  if (!active.length) {
+    return { doc: { frontMatter: [], chapters: [] }, report };
+  }
+
+  /* ---------- 1b. concat mode: no competition between files ---------- */
+  if (opts.mode === 'concat') {
+    const frontMatter = [];
+    const chapters = [];
+    for (const src of active) {
+      frontMatter.push(...(src.doc.frontMatter || []));
+      for (const c of src.doc.chapters) chapters.push({ ...c, source: src.label });
+    }
+
+    if (opts.renumber) {
+      const counters = new Map();
+      for (const c of chapters) {
+        if (c.kind !== 'chapter') continue;
+        const n = (counters.get(c.group) || 0) + 1;
+        counters.set(c.group, n);
+        c.num = n;
+      }
+    }
+
+    chapters.forEach((c, i) => { c.id = 'c-' + String(i + 1).padStart(3, '0'); });
+    report.mode = 'concat';
+    report.renumbered = Boolean(opts.renumber);
+    return {
+      doc: { frontMatter, chapters, hasChapters: chapters.some((c) => c.kind === 'chapter') },
+      report,
+    };
+  }
+
+  /* ---------- 1c. a single source is passed through untouched ---------- */
+  if (active.length === 1) {
+    const src = active[0];
+    const chapters = src.doc.chapters.map((c, i) => ({
+      ...c,
+      id: 'c-' + String(i + 1).padStart(3, '0'),
+      paragraphs: c.paragraphs.slice(),
+      sections: (c.sections || []).map((s) => ({ ...s, paragraphs: s.paragraphs.slice() })),
+    }));
+    report.mode = 'versions';
+    report.singleSource = src.label;
+    return {
+      doc: {
+        frontMatter: (src.doc.frontMatter || []).slice(),
+        chapters,
+        hasChapters: chapters.some((c) => c.kind === 'chapter'),
+      },
+      report,
+    };
+  }
+
+  report.mode = 'versions';
+
+  /* ---------- 2. front matter ---------- */
+  const frontCandidates = active
+    .map((s) => ({ label: s.label, text: (s.doc.frontMatter || []).join('\n') }))
+    .filter((c) => c.text.trim());
+  let frontMatter = [];
+  if (frontCandidates.length) {
+    const chosen = frontCandidates.reduce((a, b) => (b.text.length > a.text.length ? b : a));
+    frontMatter = (active.find((s) => s.label === chosen.label).doc.frontMatter || []).slice();
+    report.frontMatter = { chosen: chosen.label, candidates: frontCandidates.map((c) => ({ label: c.label, chars: c.text.length })) };
+  }
+
+  /* ---------- 3. specials ---------- */
+  const specialOrder = [];
+  const specialMap = new Map();
+  for (const src of active) {
+    for (const c of src.doc.chapters) {
+      if (c.kind !== 'special') continue;
+      const key = stripBrackets(c.rawTitle);
+      if (!specialMap.has(key)) {
+        specialMap.set(key, []);
+        specialOrder.push(key);
+      }
+      specialMap.get(key).push({ label: src.label, chapters: [c] });
+    }
+  }
+
+  const specialOut = [];
+  for (const key of specialOrder) {
+    const entries = specialMap.get(key);
+    let chosen;
+    if (entries.length === 1) {
+      chosen = entries[0];
+    } else if (opts.pick === 'first') {
+      chosen = entries[0];
+    } else {
+      chosen = entries.reduce((a, b) => (totalChars(b.chapters) > totalChars(a.chapters) ? b : a));
+    }
+    const src = active.find((s) => s.label === chosen.label);
+    const copy = { ...chosen.chapters[0], source: chosen.label };
+    specialOut.push(copy);
+    if (entries.length > 1) {
+      report.specials.push({ title: key, chosen: chosen.label, candidates: candidatesOf(entries) });
+    }
+  }
+
+  /* ---------- 4. volume headings ---------- */
+  const volumeMap = new Map();
+  for (const src of active) {
+    for (const c of src.doc.chapters) {
+      if (c.kind !== 'volume') continue;
+      if (!volumeMap.has(c.num)) volumeMap.set(c.num, { label: src.label, chapters: [c] });
+    }
+  }
+  const volumes = Array.from(volumeMap.values())
+    .map((v) => ({ ...v.chapters[0], source: v.label }))
+    .sort((a, b) => (a.num === null ? 0 : a.num) - (b.num === null ? 0 : b.num));
+
+  /* ---------- 5. chapters ---------- */
+  /** key -> [{label, chapters: []}] in source order, parts in document order */
+  const chapterMap = new Map();
+  const groupOrder = [];
+  for (const src of active) {
+    for (const c of src.doc.chapters) {
+      if (c.kind !== 'chapter') continue;
+      const key = chapterKey(c);
+      if (!chapterMap.has(key)) {
+        chapterMap.set(key, { group: c.group, num: c.num, entries: [] });
+      }
+      const bucket = chapterMap.get(key);
+      const last = bucket.entries[bucket.entries.length - 1];
+      if (last && last.label === src.label) last.chapters.push(c);
+      else bucket.entries.push({ label: src.label, chapters: [c] });
+      if (!groupOrder.includes(c.group)) groupOrder.push(c.group);
+    }
+  }
+
+  const mergedChapters = [];
+  for (const [key, bucket] of chapterMap) {
+    const entries = bucket.entries;
+    let chosen;
+    let reason;
+    if (entries.length === 1) {
+      chosen = entries[0];
+      reason = 'only-source';
+    } else if (opts.pick === 'first') {
+      chosen = entries[0];
+      reason = 'pick-first';
+    } else {
+      chosen = entries.reduce((a, b) => (totalChars(b.chapters) > totalChars(a.chapters) ? b : a));
+      reason = 'longest';
+    }
+
+    const parts = chosen.chapters.map((c) => ({
+      ...c,
+      paragraphs: c.paragraphs.slice(),
+      sections: (c.sections || []).map((s) => ({
+        ...s,
+        paragraphs: s.paragraphs.slice(),
+      })),
+      source: chosen.label,
+    }));
+
+    if (entries.length > 1) {
+      const subtitles = entries
+        .map((e) => e.chapters.map((c) => c.subtitle).filter(Boolean).join(' / '))
+        .filter(Boolean);
+      const titleMismatch = subtitles.length > 1 && new Set(subtitles).size === subtitles.length;
+      report.chapters.push({
+        key,
+        group: bucket.group,
+        num: bucket.num,
+        chosen: chosen.label,
+        reason,
+        candidates: candidatesOf(entries),
+        titleMismatch,
+      });
+    }
+
+    mergedChapters.push({ key, group: bucket.group, num: bucket.num, parts });
+  }
+
+  /* ---------- 6. paragraph dedupe + flatten ---------- */
+  const flat = [];
+  for (const entry of mergedChapters) {
+    if (entry.parts.length === 1) {
+      const single = entry.parts[0];
+      let paragraphs = single.paragraphs;
+      if (opts.paragraphDedupe) {
+        const res = dedupeParagraphs(paragraphs, opts.paragraphDedupeMinLength);
+        paragraphs = res.paragraphs;
+        report.paragraphDedupeRemoved += res.removed;
+      }
+      const sections = (single.sections || []).map((section) => {
+        if (!opts.paragraphDedupe) return section;
+        const res = dedupeParagraphs(section.paragraphs, opts.paragraphDedupeMinLength);
+        report.paragraphDedupeRemoved += res.removed;
+        return { ...section, paragraphs: res.paragraphs };
+      });
+      flat.push({ ...single, key: entry.key, paragraphs, sections });
+      continue;
+    }
+
+    // Multi-part chapter: keep every part in order, as one chapter block.
+    const combined = [];
+    for (const part of entry.parts) combined.push(...part.paragraphs);
+    let paragraphs = combined;
+    if (opts.paragraphDedupe) {
+      const res = dedupeParagraphs(paragraphs, opts.paragraphDedupeMinLength);
+      paragraphs = res.paragraphs;
+      report.paragraphDedupeRemoved += res.removed;
+    }
+    flat.push({
+      ...entry.parts[0],
+      key: entry.key,
+      id: entry.parts[0].id,
+      subtitle: entry.parts.map((p) => p.subtitle).filter(Boolean).join(' / '),
+      paragraphs,
+      sections: entry.parts.reduce((acc, part) => acc.concat(part.sections || []), []),
+      multiPart: entry.parts.length,
+      source: entry.parts[0].source,
+    });
+  }
+
+  /* ---------- 7. ordering: follow the most complete source ---------- */
+  // Hanging every kind of block in its own pile (specials, then volumes, then
+  // chapters) scrambles a book whose parts interleave, so walk the reference
+  // document and place each block where it originally sat.
+  const base = active.reduce((a, b) => (b.doc.chapters.length > a.doc.chapters.length ? b : a));
+  report.baseSource = base.label;
+
+  const specialByTitle = new Map(specialOut.map((c) => [stripBrackets(c.rawTitle), c]));
+  const volumeByNum = new Map(volumes.map((c) => [c.num, c]));
+  const flatByKey = new Map(flat.map((c) => [c.key, c]));
+
+  const ordered = [];
+  const placed = new Set();
+  const place = (block) => {
+    if (!block) return;
+    ordered.push(block);
+  };
+
+  for (const c of base.doc.chapters) {
+    if (c.kind === 'special') {
+      const key = stripBrackets(c.rawTitle);
+      if (placed.has('s:' + key)) continue;
+      placed.add('s:' + key);
+      place(specialByTitle.get(key));
+    } else if (c.kind === 'volume') {
+      if (placed.has('v:' + c.num)) continue;
+      placed.add('v:' + c.num);
+      place(volumeByNum.get(c.num));
+    } else if (c.kind === 'chapter') {
+      const key = chapterKey(c);
+      if (placed.has('c:' + key)) continue;
+      placed.add('c:' + key);
+      place(flatByKey.get(key));
+    }
+  }
+
+  // Blocks that only exist in the other sources go last, keeping their own order.
+  for (const c of specialOut) if (!placed.has('s:' + stripBrackets(c.rawTitle))) ordered.push(c);
+  for (const v of volumes) if (!placed.has('v:' + v.num)) ordered.push(v);
+  for (const c of flat) if (!placed.has('c:' + c.key)) ordered.push(c);
+
+  // Stable ids after the merge.
+  ordered.forEach((c, i) => {
+    c.id = 'c-' + String(i + 1).padStart(3, '0');
+  });
+
+  /* ---------- 8. warnings ---------- */
+  for (const src of active) {
+    const perKey = new Map();
+    for (const c of src.doc.chapters) {
+      if (c.kind !== 'chapter') continue;
+      const k = chapterKey(c);
+      perKey.set(k, (perKey.get(k) || 0) + 1);
+    }
+    for (const [k, n] of perKey) {
+      if (n > 1) report.warnings.push(src.label + ' 中 ' + k + ' 出现 ' + n + ' 次，已作为分段章节保留');
+    }
+  }
+
+  if (report.chapters.length) {
+    const mismatched = report.chapters.filter((c) => c.titleMismatch);
+    if (mismatched.length >= 3 && mismatched.length >= report.chapters.length / 2) {
+      report.warnings.push(
+        '多个文件的同名章节标题几乎都不同（' + mismatched.length + '/' + report.chapters.length +
+        '），这些文件可能是不同的书而不是同一本书的不同版本；如确为不同书，请使用 --merge-mode concat'
+      );
+    }
+    const choices = new Map();
+    for (const c of report.chapters) choices.set(c.chosen, (choices.get(c.chosen) || 0) + 1);
+    if (choices.size > 1 && active.length > 1) {
+      const summary = Array.from(choices.entries()).map(([k, v]) => k + ' ' + v + ' 章').join('，');
+      report.warnings.push('章节择优结果混合了多个来源：' + summary + '（详见报告）');
+    }
+  }
+
+  const doc = {
+    frontMatter,
+    chapters: ordered,
+    hasChapters: ordered.some((c) => c.kind === 'chapter'),
+  };
+
+  return { doc, report };
+}
+
+/** Render the merge report as Markdown. Never part of the book output. */
+function renderMergeReport(report) {
+  const lines = [];
+  lines.push('# 合并报告');
+  lines.push('');
+  lines.push('## 来源文件');
+  lines.push('');
+  lines.push('| 文件 | 编码 | 章节 | 正文字数 |');
+  lines.push('| --- | --- | --- | --- |');
+  for (const s of report.sources) {
+    lines.push('| ' + s.label + ' | ' + (s.encoding || '-') + ' | ' + s.chapters + ' | ' + s.chars + ' |');
+  }
+  lines.push('');
+
+  if (report.duplicateFiles.length) {
+    const dropped = report.duplicateFiles.filter((d) => d.dropped.length);
+    if (dropped.length) {
+      lines.push('## 重复文件（内容完全相同）');
+      lines.push('');
+      for (const d of dropped) {
+        lines.push('- 保留 ' + d.kept + '，忽略 ' + d.dropped.join('、'));
+      }
+      lines.push('');
+    }
+  }
+
+  if (report.frontMatter && report.frontMatter.candidates.length > 1) {
+    lines.push('## 前言取舍');
+    lines.push('');
+    lines.push('采用：' + report.frontMatter.chosen);
+    for (const c of report.frontMatter.candidates) lines.push('- ' + c.label + '：' + c.chars + ' 字');
+    lines.push('');
+  }
+
+  if (report.specials.length) {
+    lines.push('## 特殊篇目取舍');
+    lines.push('');
+    for (const s of report.specials) {
+      lines.push('- ' + s.title + '：采用 ' + s.chosen + '（' + s.candidates.map((c) => c.label + ' ' + c.chars + ' 字').join(' / ') + '）');
+    }
+    lines.push('');
+  }
+
+  if (report.chapters.length) {
+    lines.push('## 章节取舍');
+    lines.push('');
+    lines.push('| 章节 | 采用 | 依据 | 候选（字数） |');
+    lines.push('| --- | --- | --- | --- |');
+    for (const c of report.chapters) {
+      const label = (c.group === 'main' ? '' : c.group) + '第' + c.num + '章';
+      const cands = c.candidates.map((x) => x.label + ' ' + x.chars + (x.parts > 1 ? '(' + x.parts + '段)' : '')).join(' / ');
+      lines.push('| ' + label + ' | ' + c.chosen + ' | ' + c.reason + ' | ' + cands + ' |');
+    }
+    lines.push('');
+  }
+
+  if (report.paragraphDedupeRemoved) {
+    lines.push('## 段落去重');
+    lines.push('');
+    lines.push('移除完全重复段落 ' + report.paragraphDedupeRemoved + ' 段。');
+    lines.push('');
+  }
+
+  if (report.warnings.length) {
+    lines.push('## 提示');
+    lines.push('');
+    for (const w of report.warnings) lines.push('- ' + w);
+    lines.push('');
+  }
+
+  return lines.join('\n');
+}
+
+return { DEFAULT_MERGE, documentFingerprint, dedupeParagraphs, mergeDocuments, renderMergeReport };
 });
 
 __define('src/util.mjs', function () {
@@ -5077,12 +5342,160 @@ function renderFormat(doc, format, options) {
 return { stripBrackets, guessMetaFromFilename, toMarkdown, BASE_CSS, toHtml, SUPPORTED_FORMATS, extensionFor, renderFormat };
 });
 
+__define('src/output.mjs', function () {
+'use strict';
+/**
+ * output.mjs — encode generated text for disk or download.
+ *
+ * Encoding, BOM and line ending are applied here, once, for both runtimes:
+ * the CLI writes the returned bytes to a file and the browser turns them into
+ * a Blob. Keeping this out of the writers is what makes a file produced by the
+ * page byte-identical to the one produced by the command line.
+ *
+ * Only encodings that can be produced without lookup tables live here. GBK and
+ * Big5 output needs a Unicode to legacy mapping (hundreds of kilobytes) or a
+ * system iconv; the CLI falls back to iconv, the browser reports that it cannot
+ * do it instead of silently writing UTF-8.
+ */
+
+/** Encodings this module can produce on its own. */
+const OUTPUT_ENCODINGS = ['utf-8', 'utf-16le', 'utf-16be', 'latin1'];
+
+/** Human readable labels for UI selects. */
+const OUTPUT_ENCODING_LABELS = {
+  'utf-8': 'UTF-8',
+  'utf-16le': 'UTF-16LE',
+  'utf-16be': 'UTF-16BE',
+  latin1: 'Latin-1',
+};
+
+const ALIASES = {
+  'utf-8': 'utf-8',
+  utf8: 'utf-8',
+  'utf-16le': 'utf-16le',
+  utf16le: 'utf-16le',
+  unicode: 'utf-16le',
+  'utf-16be': 'utf-16be',
+  utf16be: 'utf-16be',
+  latin1: 'latin1',
+  'iso-8859-1': 'latin1',
+  binary: 'latin1',
+  ascii: 'latin1',
+};
+
+/** True when encodeOutput can handle the name without external help. */
+function isSupportedEncoding(name) {
+  const key = String(name === undefined || name === null || name === '' ? 'utf-8' : name).trim().toLowerCase();
+  return Object.prototype.hasOwnProperty.call(ALIASES, key);
+}
+
+/**
+ * Resolve an encoding name to its canonical form.
+ * Throws an error with code E_ENCODING for anything that needs a mapping table.
+ */
+function normalizeEncoding(name) {
+  const raw = String(name === undefined || name === null || name === '' ? 'utf-8' : name).trim();
+  const key = raw.toLowerCase();
+  const enc = ALIASES[key];
+  if (enc) return enc;
+  const error = new Error(
+    '不支持的输出编码：' + raw + '（本工具只能直接输出 ' + OUTPUT_ENCODINGS.join(' / ') +
+    '；GBK / Big5 / GB18030 需要系统 iconv，命令行会自动尝试，浏览器版不支持）'
+  );
+  error.code = 'E_ENCODING';
+  throw error;
+}
+
+/** BOM bytes for an encoding, or null when the encoding has no BOM. */
+function bomFor(encoding) {
+  if (encoding === 'utf-8') return new Uint8Array([0xef, 0xbb, 0xbf]);
+  if (encoding === 'utf-16le') return new Uint8Array([0xff, 0xfe]);
+  if (encoding === 'utf-16be') return new Uint8Array([0xfe, 0xff]);
+  return null;
+}
+
+/** UTF-16 encoding: every JS code unit maps to exactly two bytes. */
+function utf16Bytes(text, bigEndian) {
+  const out = new Uint8Array(text.length * 2);
+  for (let i = 0; i < text.length; i++) {
+    const unit = text.charCodeAt(i);
+    const at = i * 2;
+    if (bigEndian) {
+      out[at] = unit >> 8 & 0xff;
+      out[at + 1] = unit & 0xff;
+    } else {
+      out[at] = unit & 0xff;
+      out[at + 1] = unit >> 8 & 0xff;
+    }
+  }
+  return out;
+}
+
+/** Latin-1 encoding; characters outside 0x00-0xff are counted as lossy. */
+function latin1Bytes(text) {
+  const out = new Uint8Array(text.length);
+  let lossy = 0;
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code > 0xff) lossy++;
+    out[i] = code & 0xff;
+  }
+  return { bytes: out, lossy };
+}
+
+/**
+ * Encode text for output.
+ *
+ * @param {string} text
+ * @param {{encoding?: string, bom?: boolean|undefined, eol?: 'lf'|'crlf'}} [options]
+ *   bom === undefined keeps the default: UTF-16 gets a BOM, everything else none.
+ * @returns {{bytes: Uint8Array, encoding: string, eol: string, bom: boolean, lossy: number}}
+ */
+function encodeOutput(text, options) {
+  const opts = options || {};
+  const encoding = normalizeEncoding(opts.encoding);
+  const eol = opts.eol === 'crlf' ? 'crlf' : 'lf';
+
+  let body = String(text === null || text === undefined ? '' : text).replace(/\r\n?/g, '\n');
+  if (eol === 'crlf') body = body.replace(/\n/g, '\r\n');
+
+  let bytes;
+  let lossy = 0;
+  if (encoding === 'utf-8') {
+    bytes = new TextEncoder().encode(body);
+  } else if (encoding === 'utf-16le' || encoding === 'utf-16be') {
+    bytes = utf16Bytes(body, encoding === 'utf-16be');
+  } else {
+    const result = latin1Bytes(body);
+    bytes = result.bytes;
+    lossy = result.lossy;
+  }
+
+  /* A UTF-16 file without a BOM is legal but almost always misdetected by
+     other tools, so the default differs per encoding. */
+  const defaultBom = encoding === 'utf-16le' || encoding === 'utf-16be';
+  const withBom = opts.bom === undefined ? defaultBom : opts.bom === true;
+  const bom = withBom ? bomFor(encoding) : null;
+  if (bom) {
+    const combined = new Uint8Array(bom.length + bytes.length);
+    combined.set(bom, 0);
+    combined.set(bytes, bom.length);
+    bytes = combined;
+  }
+
+  return { bytes, encoding, eol, bom: Boolean(bom), lossy };
+}
+
+return { OUTPUT_ENCODINGS, OUTPUT_ENCODING_LABELS, isSupportedEncoding, normalizeEncoding, bomFor, encodeOutput };
+});
+
 __define('web/app.mjs', function () {
 'use strict';
 const __m0 = __require('web/buffer.mjs');
 const installBuffer = __m0.installBuffer;
-const __m1 = __require('src/encoding.mjs');
-const detectEncoding = __m1.detectEncoding;
+const __m1 = __require('src/input.mjs');
+const prepareInput = __m1.prepareInput;
+const markupFormatOf = __m1.markupFormatOf;
 const __m2 = __require('src/parser.mjs');
 const parseDocument = __m2.parseDocument;
 const documentStats = __m2.documentStats;
@@ -5092,28 +5505,34 @@ const renderMergeReport = __m3.renderMergeReport;
 const __m4 = __require('src/lint.mjs');
 const lintDocument = __m4.lintDocument;
 const fixDocument = __m4.fixDocument;
+const renderLintReport = __m4.renderLintReport;
+const CLEAN_FIXES = __m4.CLEAN_FIXES;
 const PROOFREAD_FIXES = __m4.PROOFREAD_FIXES;
 const __m5 = __require('src/titles.mjs');
 const fillChapterTitles = __m5.fillChapterTitles;
 const __m6 = __require('src/typography.mjs');
-const renderDocument = __m6.renderDocument;
 const DEFAULT_FORMAT = __m6.DEFAULT_FORMAT;
 const __m7 = __require('src/converters.mjs');
 const renderFormat = __m7.renderFormat;
+const __m8 = __require('src/output.mjs');
+const encodeOutput = __m8.encodeOutput;
+const OUTPUT_ENCODINGS = __m8.OUTPUT_ENCODINGS;
+const OUTPUT_ENCODING_LABELS = __m8.OUTPUT_ENCODING_LABELS;
 
 /**
  * app.mjs — the browser front end.
  *
- * It runs the same modules as the CLI: encoding detection, the heading rule
- * engine, the parser, the merger, the linter, the typesetters and the writers.
- * Only the Node specific pieces differ, which is why the codec layer exists.
+ * It runs the same modules as the CLI: encoding detection, markup removal,
+ * raw-text repairs, the heading rule engine, the parser, the merger, the
+ * linter, the typesetters and the writers. Only the pieces that need a file
+ * system or a decompressor differ, which is why the codec and output layers
+ * exist. DOCX / EPUB / PDF *input* needs decompression, so those files are
+ * rejected with a clear message; all twelve export formats work.
  *
  * scripts/build-web.mjs inlines this file together with every module it imports
  * into a single self contained index.html, so the page also works from file://.
- *
- * Browser limits: DOCX/EPUB/PDF input needs decompression, which this build
- * does not ship, so those files are rejected with a clear message.
  */
+
 
 
 
@@ -5127,23 +5546,23 @@ const renderFormat = __m7.renderFormat;
 
 installBuffer();
 const FORMATS = ['txt', 'md', 'html', 'json', 'yaml', 'xml', 'csv', 'js', 'rtf', 'docx', 'epub', 'pdf'];
+const TEXT_FORMATS = new Set(['txt', 'md', 'html', 'json', 'yaml', 'xml', 'csv', 'js']);
 const DEFAULT_SELECTED = ['txt'];
 const FW = '\u3000';
+const LOADER_MARKDOWN = { titleLevels: [], chapterLevels: [1], sectionLevels: [2, 3, 4, 5, 6] };
 
 const state = {
   files: [],
   mode: 'merge',
   strategy: 'versions',
   outputs: [],
+  issueText: '',
 };
 
 const $ = (id) => document.getElementById(id);
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
 const stemOf = (name) => String(name).replace(/\.[^.]+$/, '');
 const bytesText = (n) => (n < 1024 ? n + ' B' : n < 1048576 ? (n / 1024).toFixed(1) + ' KB' : (n / 1048576).toFixed(1) + ' MB');
-
-/* ---------- 主题 ---------- */
-/* theme lives in the classic script above so it survives a module failure */
 
 /* ---------- 状态提示 ---------- */
 function setStatus(text, kind) {
@@ -5168,19 +5587,26 @@ async function addFiles(list) {
 
   for (const file of accepted) {
     const buffer = new Uint8Array(await file.arrayBuffer());
-    state.files.push({ name: file.name, size: buffer.length, bytes: buffer });
+    state.files.push({ name: file.name, size: buffer.length, bytes: buffer, format: markupFormatOf(file.name) });
   }
   renderFiles();
 
   if (accepted.length) setStatus('已添加 ' + accepted.length + ' 个文件，共 ' + state.files.length + ' 个', 'ok');
   if (rejected.length) {
-    setStatus('已跳过 ' + rejected.join('、') + '：浏览器版不解压容器格式，请用命令行处理。', 'error');
+    setStatus('已跳过 ' + rejected.join('、') + '：浏览器版不解压 DOCX / EPUB / PDF（.doc 请先转成 .docx 或 .txt），请用命令行处理。', 'error');
   }
 }
 
 function resetOutputs() {
   state.outputs = [];
+  state.issueText = '';
   $('btnDownload').hidden = true;
+}
+
+function formatBadge(file) {
+  if (file.format === 'html') return '<span class="badge">HTML</span>';
+  if (file.format === 'rtf') return '<span class="badge">RTF</span>';
+  return '';
 }
 
 function renderFiles() {
@@ -5193,6 +5619,7 @@ function renderFiles() {
   box.innerHTML = state.files.map((file, index) => (
     '<div class="file-item">' +
       '<span class="name">' + esc(file.name) + '</span>' +
+      formatBadge(file) +
       '<span class="meta">' + bytesText(file.size) + '</span>' +
       '<button type="button" class="remove" data-index="' + index + '">移除</button>' +
     '</div>'
@@ -5220,8 +5647,23 @@ function readFormatOptions() {
   };
 }
 
+function readOutputOptions() {
+  return {
+    encoding: $('outEncoding').value || 'utf-8',
+    eol: $('outEol').value || 'lf',
+    bom: $('outBom').checked ? true : undefined,
+  };
+}
+
 function structureOptions() {
   return { markdown: { titleLevels: [1], chapterLevels: [2], sectionLevels: [3] } };
+}
+
+function structureForFile(file) {
+  /* Markup loaders already encode structure as Markdown depth: H1 is a
+     chapter. That is independent of the user's own Markdown mapping. */
+  if (file.format === 'html') return { markdown: { ...LOADER_MARKDOWN } };
+  return structureOptions();
 }
 
 function selectedFormats() {
@@ -5229,35 +5671,57 @@ function selectedFormats() {
 }
 
 /* ---------- 处理 ---------- */
-function decodeFiles() {
+function prepareFiles() {
   for (const file of state.files) {
-    const detected = detectEncoding(file.bytes);
-    file.text = detected.text;
-    file.encoding = detected.label;
+    const prepared = prepareInput(file.name, file.bytes);
+    file.text = prepared.text;
+    file.encoding = prepared.label;
+    file.format = prepared.format;
+    file.meta = prepared.meta || {};
+    file.rawIssues = prepared.rawIssues;
+    file.fixed = prepared.fixed;
   }
 }
 
 function applyProofreading(entries) {
   const simplify = $('proofread').checked;
   const autoTitles = $('autoTitles').checked;
-  if (!simplify && !autoTitles) return entries;
   return entries.map((entry) => {
     let doc = entry.doc;
-    if (simplify) doc = fixDocument(doc, { rules: PROOFREAD_FIXES }).doc;
-    if (autoTitles) doc = fillChapterTitles(doc).doc;
-    return { ...entry, doc };
+    let fixed = (entry.fixed || []).slice();
+
+    /* The CLI always applies the safe clean-up set; the page does the same so
+       both fronts produce the same bytes for the same input. */
+    const clean = fixDocument(doc, { rules: CLEAN_FIXES });
+    doc = clean.doc;
+    fixed = fixed.concat(clean.fixed);
+
+    if (simplify) {
+      const proof = fixDocument(doc, { rules: PROOFREAD_FIXES });
+      doc = proof.doc;
+      fixed = fixed.concat(proof.fixed);
+    }
+    if (autoTitles) {
+      const filled = fillChapterTitles(doc);
+      doc = filled.doc;
+      if (filled.filled.length) fixed = fixed.concat([{ id: 'C008', count: filled.filled.length }]);
+    }
+    return { ...entry, doc, fixed };
   });
 }
 
 function buildEntries() {
-  decodeFiles();
-  const structure = structureOptions();
+  prepareFiles();
 
   if (state.mode === 'separate') {
     const entries = state.files.map((file) => ({
       stem: stemOf(file.name),
-      doc: parseDocument(file.text, structure),
+      doc: parseDocument(file.text, structureForFile(file)),
       encoding: file.encoding,
+      format: file.format,
+      meta: file.meta || {},
+      rawIssues: file.rawIssues || [],
+      fixed: file.fixed || [],
       sourceText: file.text,
       report: '',
     }));
@@ -5268,13 +5732,17 @@ function buildEntries() {
     label: file.name,
     path: file.name,
     encoding: file.encoding,
-    doc: parseDocument(file.text, structure),
+    doc: parseDocument(file.text, structureForFile(file)),
   }));
   const merged = mergeDocuments(docs, { mode: state.strategy });
   return applyProofreading([{
     stem: state.files.length > 1 ? '合并结果' : stemOf(state.files[0].name),
     doc: merged.doc,
     encoding: state.files.map((f) => f.encoding).join(' / '),
+    format: Array.from(new Set(state.files.map((f) => f.format))).join('+'),
+    meta: state.files.length === 1 ? state.files[0].meta || {} : {},
+    rawIssues: state.files.reduce((all, f) => all.concat(f.rawIssues || []), []),
+    fixed: state.files.reduce((all, f) => all.concat(f.fixed || []), []),
     sourceText: state.files.map((f) => f.text).join(''),
     report: state.files.length > 1 ? renderMergeReport(merged.report) : '',
   }]);
@@ -5285,8 +5753,17 @@ function formatFor(format, base) {
   return base;
 }
 
-function renderEntry(entry, format, base) {
-  return renderFormat(entry.doc, format, { format: formatFor(format, base), meta: { title: entry.stem } });
+function renderEntry(entry, format, base, out) {
+  const meta = { ...(entry.meta || {}), title: (entry.meta && entry.meta.title) || entry.stem };
+  const rendered = renderFormat(entry.doc, format, { format: formatFor(format, base), meta });
+  if (!TEXT_FORMATS.has(format)) return { ...rendered, lossy: 0 };
+  const encoded = encodeOutput(rendered.buffer.toString('utf8'), out);
+  return { buffer: encoded.bytes, extension: rendered.extension, binary: false, lossy: encoded.lossy };
+}
+
+function renderPreview(entry, base) {
+  const rendered = renderFormat(entry.doc, 'txt', { format: formatFor('txt', base), meta: { title: entry.stem } });
+  return rendered.buffer.toString('utf8');
 }
 
 function download(name, buffer, binary) {
@@ -5301,6 +5778,23 @@ function download(name, buffer, binary) {
   setTimeout(() => URL.revokeObjectURL(url), 5000);
 }
 
+function buildOutputs(entries, formats, base, out) {
+  const outputs = [];
+  let lossy = 0;
+  for (const entry of entries) {
+    for (const format of formats) {
+      const rendered = renderEntry(entry, format, base, out);
+      lossy += rendered.lossy || 0;
+      outputs.push({
+        name: entry.stem + '.' + rendered.extension,
+        buffer: rendered.buffer,
+        binary: rendered.binary,
+      });
+    }
+  }
+  return { outputs, lossy };
+}
+
 function processFiles() {
   if (!state.files.length) { setStatus('请先选择或拖入文本文件', 'error'); return; }
   const formats = selectedFormats();
@@ -5310,37 +5804,27 @@ function processFiles() {
   try {
     const entries = buildEntries();
     const base = readFormatOptions();
-    state.outputs = buildOutputs(entries, formats, base);
+    const out = readOutputOptions();
+    const built = buildOutputs(entries, formats, base, out);
+    state.outputs = built.outputs;
+    state.issueText = buildIssueText(entries);
 
-    const previewSource = renderEntry(entries[0], 'txt', base).buffer.toString('utf8');
+    const previewSource = renderPreview(entries[0], base);
     const truncated = previewSource.length > 2000;
     $('preview').textContent = (truncated ? previewSource.slice(0, 2000) + '\n\n……（已截断，仅显示前 2000 字）' : previewSource);
     $('previewMeta').textContent = '共 ' + previewSource.split('\n').length + ' 行 · ' + previewSource.length + ' 字' + (truncated ? ' · 已截断' : '');
     $('previewBox').hidden = false;
     $('btnDownload').hidden = false;
 
-    renderStats(entries, formats, base);
+    renderStats(entries);
     renderReport(entries);
-    setStatus('处理完成：' + entries.length + ' 个成品 × ' + formats.length + ' 种格式', 'ok');
+    renderIssues(entries);
+    const lossyNote = built.lossy ? '；' + built.lossy + ' 个字符无法用所选编码表示' : '';
+    setStatus('处理完成：' + entries.length + ' 个成品 × ' + formats.length + ' 种格式' + lossyNote, built.lossy ? 'error' : 'ok');
   } catch (error) {
     console.error(error);
     setStatus('出错了：' + error.message, 'error');
   }
-}
-
-function buildOutputs(entries, formats, base) {
-  const outputs = [];
-  for (const entry of entries) {
-    for (const format of formats) {
-      const rendered = renderEntry(entry, format, base);
-      outputs.push({
-        name: entry.stem + '.' + rendered.extension,
-        buffer: rendered.buffer,
-        binary: rendered.binary,
-      });
-    }
-  }
-  return outputs;
 }
 
 function downloadAll() {
@@ -5352,11 +5836,26 @@ function downloadAll() {
   setStatus('已开始下载 ' + outputs.length + ' 个文件', 'ok');
 }
 
-function renderStats(entries, formats, base) {
+function downloadIssues() {
+  if (!state.issueText) { setStatus('还没有检查报告，请先点击开始处理', 'error'); return; }
+  download('检查报告.txt', Buffer.from(state.issueText, 'utf8'), true);
+  setStatus('已开始下载检查报告', 'ok');
+}
+
+/* ---------- 渲染结果 ---------- */
+function lintEntry(entry) {
+  return lintDocument(entry.doc, { level: 'info' });
+}
+
+function renderStats(entries) {
   const rows = [['', ...entries.map((entry) => entry.stem)]];
   const statsList = entries.map((entry) => documentStats(entry.doc.frontMatter || [], entry.doc.chapters || []));
-  const lintList = entries.map((entry) => lintDocument(entry.doc, { level: 'error' }).counts);
+  const lintList = entries.map((entry) => lintEntry(entry).counts);
+  const formatName = (entry) => String(entry.format || 'text').split('+').map((part) => (
+    part === 'html' ? 'HTML' : part === 'rtf' ? 'RTF' : '文本'
+  )).join(' + ');
 
+  rows.push(['输入格式', ...entries.map(formatName)]);
   rows.push(['编码', ...entries.map((entry) => entry.encoding || '—')]);
   rows.push(['章节', ...statsList.map((s) => s.chapterBlocks || 0)]);
   rows.push(['小节', ...statsList.map((s) => s.sectionCount || 0)]);
@@ -5364,6 +5863,10 @@ function renderStats(entries, formats, base) {
   rows.push(['段落数', ...statsList.map((s) => s.paragraphs || 0)]);
   rows.push(['错误数', ...lintList.map((c) => c.error)]);
   rows.push(['警告数', ...lintList.map((c) => c.warn)]);
+  rows.push(['提示数', ...lintList.map((c) => c.info)]);
+  rows.push(['裸文本修复', ...entries.map((entry) => (
+    entry.fixed && entry.fixed.length ? entry.fixed.map((f) => f.id + '×' + f.count).join(' ') : '—'
+  ))]);
 
   let html = '<table class="stats-table">';
   rows.forEach((row, i) => {
@@ -5386,12 +5889,41 @@ function renderReport(entries) {
   $('reportBox').hidden = false;
 }
 
+function buildIssueText(entries) {
+  return entries.map((entry) => {
+    const lines = ['■ ' + entry.stem];
+    if (entry.rawIssues && entry.rawIssues.length) {
+      lines.push('裸文本：');
+      for (const issue of entry.rawIssues) lines.push('  [' + issue.severity + '] ' + issue.id + ' ' + issue.message);
+    } else {
+      lines.push('裸文本：无问题');
+    }
+    if (entry.fixed && entry.fixed.length) {
+      lines.push('已修复：' + entry.fixed.map((f) => f.id + '×' + f.count).join(' '));
+    }
+    lines.push('');
+    lines.push(renderLintReport(lintEntry(entry)));
+    return lines.join('\n');
+  }).join('\n\n');
+}
+
+function renderIssues(entries) {
+  $('issues').textContent = buildIssueText(entries);
+  $('issuesBox').hidden = false;
+}
+
 /* ---------- 绑定 ---------- */
 (function bindFormats() {
   $('formats').innerHTML = FORMATS.map((format) => {
     const checked = DEFAULT_SELECTED.includes(format) ? ' checked' : '';
     return '<label class="chip"><input type="checkbox" name="fmt" value="' + format + '"' + checked + '> ' + format + '</label>';
   }).join('');
+})();
+
+(function bindEncodings() {
+  $('outEncoding').innerHTML = OUTPUT_ENCODINGS.map((enc) => (
+    '<option value="' + enc + '">' + OUTPUT_ENCODING_LABELS[enc] + '</option>'
+  )).join('');
 })();
 
 (function bindMode() {
@@ -5420,6 +5952,7 @@ function renderReport(entries) {
 $('mergeStrategy').addEventListener('change', () => { state.strategy = $('mergeStrategy').value; });
 $('btnProcess').addEventListener('click', processFiles);
 $('btnDownload').addEventListener('click', downloadAll);
+$('btnIssues').addEventListener('click', downloadIssues);
 
 renderFiles();
 setStatus('准备就绪：选择或拖入文本后点击「开始处理」', '');

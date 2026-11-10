@@ -34,13 +34,25 @@
 - [x] 测试（121 通过）、SKILL.md、README、CHANGELOG、构建 index.html
 - [x] 发布 0.7.0（npm / GitHub Release / Pages / 技能目录同步）
 
-## 下一批 0.7.1：A 类缺陷
+## 0.7.1：Web 端对齐 + A 类缺陷（S1 完成）
 
-- 输出编码静默失效（--encoding gbk/big5 实际写 UTF-8）
-- check 有 ERROR 仍 exit 0、只收单文件
-- SKILL.md 两处不实（第 83 行、第 369 行）
-- --help 漏选项；--title-max-length / --pdf-page-numbers 无入口
-- ordered 规则把 Markdown 有序列表当节
+- [x] 浏览器版接入 HTML/RTF 去标记（src/input.mjs），不再把标签当正文
+- [x] 浏览器版接入裸文本检查/修复 R001–R005，检查报告可下载
+- [x] 检查报告显示规则号/位置/摘录，"警告数"不再恒 0（原按 error 级过滤）
+- [x] 输出编码 UTF-8 / UTF-16LE / UTF-16BE / Latin-1 + BOM + LF/CRLF（src/output.mjs）
+- [x] CLI --encoding 真正生效；GBK / Big5 / GB18030 走系统 iconv，失败明确报 E_ENCODING
+- [x] CLI format / merge / convert 解析前自动修复 R 层
+- [x] 测试 136 通过；构建 index.html；文档与版本号同步
+
+仍待处理（S2 及之后）：
+
+- [ ] DOCX / EPUB / PDF 输入的浏览器版支持（原生压缩流或内联 inflate）
+- [ ] 浏览器版补齐全部 CLI 选项（core 抽离 + 高级选项 JSON）
+- [ ] 输出打 ZIP 下载、目录拖入，替代目录/落盘类工作流
+- [ ] check 有 ERROR 仍 exit 0、只收单文件
+- [ ] SKILL.md 两处不实（第 83 行、第 369 行）
+- [ ] --help 漏选项；--title-max-length / --pdf-page-numbers 无入口
+- [ ] ordered 规则把 Markdown 有序列表当节
 
 ## 之后 0.8.0：规则配置与回归
 

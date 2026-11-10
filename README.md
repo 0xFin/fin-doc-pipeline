@@ -232,8 +232,9 @@ fin-doc-pipeline format 书.md --md-title-level 1 --md-chapter-level 2 --md-sect
 
 ## Web 版
 
-浏览器版完全本地运行，没有后端、不上传文件：编码识别、解析、合并、校对、排版和
-12 种格式导出全部内联在一个 `index.html` 里，双击即可离线使用，也能直接收藏。
+浏览器版完全本地运行，没有后端、不上传文件：编码识别、HTML/RTF 去标记、裸文本修复、
+解析、合并、校对、排版、检查报告和 12 种格式导出全部内联在一个 `index.html` 里，
+双击即可离线使用，也能直接收藏。
 
 [![Web 界面](assets/web-ui.jpg)](https://0xFin.github.io/fin-doc-pipeline/)
 
@@ -241,8 +242,10 @@ fin-doc-pipeline format 书.md --md-title-level 1 --md-chapter-level 2 --md-sect
 - **离线版**：`index.html`（生成产物，约 200 KB），拷到任何地方双击都能用
 - **重新生成**：改 `web/index.template.html` 或 `web/app.mjs`，运行 `npm run build`
 
-> 浏览器版只接受文本类输入（txt / md / html / json / csv…）。DOCX / EPUB / PDF
-> **输入**需要解压，请用命令行处理；导出这 12 种格式不受影响。
+> 浏览器版接受文本类输入（txt / md / html / rtf / json / csv…），HTML / RTF 会先
+> 去掉标记；DOCX / EPUB / PDF **输入**需要解压，请用命令行处理，导出这 12 种格式不受影响。
+> 输出编码可选 UTF-8 / UTF-16LE / UTF-16BE / Latin-1，并支持 BOM 与 CRLF；GBK / Big5 /
+> GB18030 输出需要系统 iconv，只能用命令行。
 
 ## 项目结构
 

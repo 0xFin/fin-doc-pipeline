@@ -1,6 +1,6 @@
 {
   "name": "fin-doc-pipeline",
-  "version": "0.7.0",
+  "version": "0.7.1",
   "description": "Universal text-document pipeline: detect encoding, dedupe and merge multiple sources, lint and repair, typeset, and export to txt, md, html, rtf, docx, epub or pdf. Also reads docx and epub as input.",
   "type": "module",
   "bin": {

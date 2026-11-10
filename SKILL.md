@@ -351,7 +351,9 @@ Command line flags always win over the config file.
 - `--num-width 3`, `--blank-before 1`, `--blank-after 1`
 - `--reflow` join soft-wrapped lines (destructive, opt in)
 - `--normalize` normalise punctuation (destructive, opt in)
-- `--encoding`, `--bom` / `--no-bom`, `--eol lf|crlf`
+- `--encoding utf-8|utf-16le|utf-16be|latin1`, `--bom` / `--no-bom`, `--eol lf|crlf`
+  (GBK / Big5 / GB18030 output goes through the system iconv; without iconv the
+  command fails with `E_ENCODING` instead of silently writing UTF-8)
 
 ## Safety rules
 

@@ -10,6 +10,7 @@
 
 import fs from 'node:fs';
 import path from 'node:path';
+import { spawnSync } from 'node:child_process';
 import { fileURLToPath } from 'node:url';
 import os from 'node:os';
 import process from 'node:process';
@@ -24,6 +25,7 @@ import { fillChapterTitles } from './titles.mjs';
 import { renderFormat, SUPPORTED_FORMATS, guessMetaFromFilename } from './converters.mjs';
 import { isContainer, isKnownInput, isMarkup, loadDocument, loadMarkup } from './loaders/index.mjs';
 import { ForgeError, fail, pretty } from './util.mjs';
+import { encodeOutput, isSupportedEncoding, OUTPUT_ENCODINGS } from './output.mjs';
 
 const VERSION = (() => {
   try {
@@ -167,11 +169,15 @@ function buildOptions(flags, config) {
   if (flags['paragraph-dedupe'] === false) mergeOpts.paragraphDedupe = false;
   if (flags['min-paragraph-length']) mergeOpts.paragraphDedupeMinLength = Number(flags['min-paragraph-length']);
 
-  const output = { encoding: 'utf-8', bom: false, eol: 'lf', ...(config.output || {}) };
+  const output = { encoding: 'utf-8', eol: 'lf', ...(config.output || {}) };
   if (flags.encoding) output.encoding = flags.encoding;
   if (flags.eol) output.eol = flags.eol;
   if (flags.bom === true) output.bom = true;
   if (flags.bom === false) output.bom = false;
+  if (!isSupportedEncoding(output.encoding) && !hasSystemIconv()) {
+    fail('E_ENCODING', '不支持的输出编码：' + output.encoding + '（可直接输出 ' +
+      OUTPUT_ENCODINGS.join(' / ') + '；GBK / Big5 / GB18030 需要系统 iconv，当前环境没有）');
+  }
 
   const safety = { cleanSources: false, hardDelete: false, ...(config.safety || {}) };
   if (flags['clean-sources'] === true) safety.cleanSources = true;
@@ -320,29 +326,75 @@ function structureFor(source, options) {
 }
 
 function buildDocument(source, options) {
-  const raw = typeof source === 'string' ? source : source.raw;
+  const original = typeof source === 'string' ? source : source.raw;
+  const bom = Boolean(source && source.detection && source.detection.bom);
+  const repaired = fixRawText(original, { bom });
+  const raw = repaired.text;
+
+  let doc;
   if (options.structure === 'none') {
     const paragraphs = raw
-      .replace(/\r\n?/g, '\n')
       .split('\n')
       .map((l) => l.trim())
       .filter(Boolean);
-    return { frontMatter: paragraphs, chapters: [], hasChapters: false, stats: { chapterCount: 0, chapters: 0 } };
+    doc = { frontMatter: paragraphs, chapters: [], hasChapters: false, stats: { chapterCount: 0, chapters: 0 } };
+  } else {
+    doc = parseDocument(raw, structureFor(source, options));
   }
-  return parseDocument(raw, structureFor(source, options));
+
+  if (repaired.fixed.length) doc.rawFixed = repaired.fixed;
+  return doc;
 }
 
 /* =========================================================
    Output
    ========================================================= */
 
+let iconvProbe = null;
+
+/** True when the system has an iconv binary that can produce legacy encodings. */
+function hasSystemIconv() {
+  if (iconvProbe !== null) return iconvProbe;
+  try {
+    const result = spawnSync('iconv', ['-l'], { stdio: 'ignore' });
+    iconvProbe = !result.error && result.status === 0;
+  } catch {
+    iconvProbe = false;
+  }
+  return iconvProbe;
+}
+
+/** Encode through the system iconv; only used for names that need a mapping table. */
+function iconvEncode(text, outputOptions) {
+  let body = String(text).replace(/\r\n?/g, '\n');
+  if (outputOptions.eol === 'crlf') body = body.replace(/\n/g, '\r\n');
+  const encoding = String(outputOptions.encoding || '');
+  const result = spawnSync('iconv', ['-f', 'utf-8', '-t', encoding], {
+    input: Buffer.from(body, 'utf8'),
+    maxBuffer: 1 << 28,
+  });
+  if (result.error || result.status !== 0) {
+    fail('E_ENCODING', '无法用系统 iconv 输出 ' + encoding + '：' +
+      (result.error ? result.error.message : '退出码 ' + result.status));
+  }
+  return result.stdout;
+}
+
+/** Encode text for a file: native encodings first, then iconv for legacy ones. */
+function encodeForFile(text, outputOptions) {
+  try {
+    return encodeOutput(text, outputOptions).bytes;
+  } catch (error) {
+    if (error.code !== 'E_ENCODING') throw error;
+    if (!hasSystemIconv()) fail('E_ENCODING', error.message);
+    return iconvEncode(text, outputOptions);
+  }
+}
+
 function writeOutput(file, text, outputOptions) {
   const dir = path.dirname(path.resolve(file));
   if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true });
-  let body = text;
-  if (outputOptions.eol === 'crlf') body = body.replace(/\n/g, '\r\n');
-  let buf = Buffer.from(body, 'utf8');
-  if (outputOptions.bom) buf = Buffer.concat([Buffer.from([0xef, 0xbb, 0xbf]), buf]);
+  const buf = encodeForFile(text, outputOptions);
   fs.writeFileSync(file, buf);
   return buf.length;
 }

@@ -18,7 +18,7 @@ import { cnToInt, classifyLine, parseDocument, findDuplicateNumbers } from '../s
 import { detectHeading, buildContext, romanToInt, DEFAULT_RULES } from '../src/rules.mjs';
 import { renderDocument, renderTitle, markdownMarker, DEFAULT_FORMAT, reflowParagraphs, normalizePunctuation, countText } from '../src/typography.mjs';
 import { mergeDocuments, dedupeParagraphs, renderMergeReport } from '../src/merge.mjs';
-import { lintDocument, lintRawText, fixDocument, fixRawText } from '../src/lint.mjs';
+import { lintDocument, lintRawText, fixDocument, fixRawText, CLEAN_FIXES } from '../src/lint.mjs';
 import { toMarkdown, toHtml, guessMetaFromFilename, renderFormat, SUPPORTED_FORMATS } from '../src/converters.mjs';
 import { readZip } from '../src/zip.mjs';
 import { toDocx } from '../src/formats/docx.mjs';
@@ -30,6 +30,8 @@ import { loadDocx } from '../src/loaders/docx.mjs';
 import { loadEpub } from '../src/loaders/epub.mjs';
 import { isContainer, isKnownInput, loadDocument, formatOf, loadMarkup } from '../src/loaders/index.mjs';
 import { toJson, toYaml, toXml, toCsv, toJs } from '../src/formats/data.mjs';
+import { encodeOutput, normalizeEncoding, isSupportedEncoding } from '../src/output.mjs';
+import { prepareInput, markupFormatOf } from '../src/input.mjs';
 import { render as renderWebIndex, bundle as bundleWeb } from '../scripts/build-web.mjs';
 import {
   toSimplified, traditionalChars, normalizeChinesePunctuation,
@@ -124,6 +126,44 @@ group('encoding', () => {
   test('empty input does not throw', () => {
     const r = detectEncoding(Buffer.alloc(0));
     assert.equal(r.text, '');
+  });
+});
+
+/* =========================================================
+   output encoding
+   ========================================================= */
+group('output encoding', () => {
+  test('utf-8 with BOM', () => {
+    const out = encodeOutput('中文\n', { encoding: 'utf-8', bom: true });
+    assert.deepEqual(Array.from(out.bytes.slice(0, 3)), [0xef, 0xbb, 0xbf]);
+    assert.equal(new TextDecoder().decode(out.bytes.subarray(3)), '中文\n');
+  });
+
+  test('utf-16le gets a BOM by default', () => {
+    const out = encodeOutput('ab', { encoding: 'utf-16le' });
+    assert.deepEqual(Array.from(out.bytes), [0xff, 0xfe, 0x61, 0x00, 0x62, 0x00]);
+  });
+
+  test('utf-16be can be written without a BOM', () => {
+    const out = encodeOutput('ab', { encoding: 'utf-16be', bom: false });
+    assert.deepEqual(Array.from(out.bytes), [0x00, 0x61, 0x00, 0x62]);
+  });
+
+  test('crlf is applied before encoding', () => {
+    const out = encodeOutput('a\nb', { encoding: 'utf-8', eol: 'crlf' });
+    assert.equal(new TextDecoder().decode(out.bytes), 'a\r\nb');
+  });
+
+  test('latin1 reports characters it cannot represent', () => {
+    const out = encodeOutput('a中', { encoding: 'latin1' });
+    assert.equal(out.lossy, 1);
+    assert.equal(out.bytes[0], 0x61);
+  });
+
+  test('names that need a mapping table throw E_ENCODING', () => {
+    assert.throws(() => normalizeEncoding('gbk'), (error) => error.code === 'E_ENCODING');
+    assert.equal(isSupportedEncoding('utf8'), true);
+    assert.equal(isSupportedEncoding('gbk'), false);
   });
 });
 
@@ -323,6 +363,41 @@ group('merge', () => {
 /* =========================================================
    lint
    ========================================================= */
+/* =========================================================
+   input preparation
+   ========================================================= */
+group('input preparation', () => {
+  test('html becomes markdown headings and plain paragraphs', () => {
+    const res = prepareInput('book.html', Buffer.from('<html><body><h1>第1章 开端</h1><p>他打开MacBook。</p></body></html>'));
+    assert.equal(res.format, 'html');
+    assert.ok(res.text.startsWith('# 第1章 开端'));
+    assert.ok(res.text.includes('他打开MacBook。'));
+    assert.ok(!res.text.includes('<h1>'));
+  });
+
+  test('rtf control words are removed', () => {
+    const res = prepareInput('book.rtf', Buffer.from('{\\rtf1\\ansi 第1章 开端\\par 他说{\\b hello}。\\par}'));
+    assert.equal(res.format, 'rtf');
+    assert.ok(res.text.includes('第1章 开端'));
+    assert.ok(!res.text.includes('\\rtf1'));
+  });
+
+  test('raw repairs run before parsing', () => {
+    const res = prepareInput('dirty.txt', Buffer.from('\uFEFF第1章\r\n\r\n\r\n正文。   \r\n\t第二段\r\n', 'utf8'));
+    assert.ok(!res.text.includes('\r'));
+    assert.ok(!/[ \t]+\n/.test(res.text));
+    assert.ok(res.fixed.some((f) => f.id === 'R001'));
+    assert.ok(res.rawIssues.some((i) => i.id === 'R002'));
+  });
+
+  test('markup format is chosen from the extension', () => {
+    assert.equal(markupFormatOf('a.HTML'), 'html');
+    assert.equal(markupFormatOf('a.xhtml'), 'html');
+    assert.equal(markupFormatOf('a.rtf'), 'rtf');
+    assert.equal(markupFormatOf('a.md'), 'text');
+  });
+});
+
 group('lint', () => {
   test('detects replacement characters and fixes them', () => {
     const doc = parseDocument('[第1章]\n这里有\uFFFD坏字符');
@@ -466,6 +541,75 @@ group('cli', () => {
     const bytes = fs.readFileSync(out);
     assert.ok(!bytes.toString('utf8').startsWith('\uFEFF'));
     assert.ok(!bytes.includes(13));
+  });
+
+  test('format applies raw-text repairs before parsing', () => {
+    const input = path.join(TMP, 'cli-dirty.txt');
+    fs.writeFileSync(input, Buffer.from('\uFEFF第1章 开端\r\n\r\n正文。   \r\n\t第二段\r\n', 'utf8'));
+    const out = path.join(TMP, 'cli-dirty.out.txt');
+    run(['format', input, '-o', out]);
+    const bytes = fs.readFileSync(out);
+    assert.ok(!(bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf));
+    const text = bytes.toString('utf8');
+    assert.ok(!text.includes('\r'));
+    assert.ok(!/[ \t]+\n/.test(text));
+    assert.ok(!text.includes('\t第二段'));
+  });
+
+  test('--encoding utf-16le writes a BOM and little endian bytes', () => {
+    const input = fixture('cli-utf16.txt', '第1章 开端\n\n正文。\n');
+    const out = path.join(TMP, 'cli-utf16.out.txt');
+    run(['format', input, '-o', out, '--encoding', 'utf-16le']);
+    const bytes = fs.readFileSync(out);
+    assert.equal(bytes[0], 0xff);
+    assert.equal(bytes[1], 0xfe);
+    const text = new TextDecoder('utf-16le').decode(bytes.subarray(2));
+    assert.ok(text.includes('开端'));
+  });
+
+  test('--encoding gbk uses the system iconv when available', () => {
+    const hasIconv = (() => {
+      try { execFileSync('iconv', ['-l'], { stdio: 'ignore' }); return true; } catch { return false; }
+    })();
+    const input = fixture('cli-gbk.txt', '第1章 开端\n\n正文。\n');
+    const out = path.join(TMP, 'cli-gbk.out.txt');
+    if (!hasIconv) {
+      assert.throws(() => execFileSync(process.execPath, [CLI, 'format', input, '-o', out, '--encoding', 'gbk'], { stdio: 'pipe' }));
+      return;
+    }
+    run(['format', input, '-o', out, '--encoding', 'gbk']);
+    const detected = detectEncoding(fs.readFileSync(out));
+    assert.equal(detected.encoding, 'gbk');
+    assert.ok(detected.text.includes('开端'));
+  });
+
+  test('an unknown encoding fails loudly instead of writing UTF-8', () => {
+    const input = fixture('cli-bad-enc.txt', '第1章\n\n正文。\n');
+    const out = path.join(TMP, 'cli-bad-enc.out.txt');
+    let failure = null;
+    try {
+      execFileSync(process.execPath, [CLI, 'format', input, '-o', out, '--encoding', 'nope'], { stdio: 'pipe' });
+    } catch (error) {
+      failure = error;
+    }
+    assert.ok(failure, 'expected a non-zero exit');
+    assert.ok(String(failure.stderr).includes('E_ENCODING'));
+    assert.ok(!fs.existsSync(out));
+  });
+
+  test('the page pipeline and the CLI agree byte for byte', () => {
+    const input = path.join(TMP, 'parity.txt');
+    fs.writeFileSync(input, Buffer.from('\uFEFF第1章 开端\r\n\r\n\r\n正文。   \r\n\t第二段\r\n', 'utf8'));
+    const cliOut = path.join(TMP, 'parity-cli.bin');
+    run(['format', input, '-o', cliOut, '--encoding', 'utf-16le', '--bom', '--eol', 'crlf']);
+
+    const prepared = prepareInput('parity.txt', fs.readFileSync(input));
+    let doc = parseDocument(prepared.text);
+    doc = fixDocument(doc, { rules: CLEAN_FIXES }).doc;
+    const text = renderDocument(doc, DEFAULT_FORMAT);
+    const page = encodeOutput(text, { encoding: 'utf-16le', bom: true, eol: 'crlf' });
+
+    assert.deepEqual(Array.from(fs.readFileSync(cliOut)), Array.from(page.bytes));
   });
 
   test('convert emits markdown and html', () => {
@@ -1121,9 +1265,23 @@ group('web single file', () => {
     assert.ok(modules.includes('web/app.mjs'));
     assert.ok(!modules.includes('src/cli.mjs'));
     assert.ok(!modules.includes('src/codec-node.mjs'));
-    assert.ok(!modules.some((id) => id.startsWith('src/loaders/')));
+    assert.ok(modules.includes('src/loaders/markup.mjs'));
+    assert.ok(modules.includes('src/output.mjs'));
+    assert.ok(modules.includes('src/input.mjs'));
+    assert.ok(!modules.includes('src/loaders/index.mjs'));
+    assert.ok(!modules.some((id) => /^src\/loaders\/(docx|epub|pdf)\.mjs$/.test(id)));
     assert.ok(source.includes("__require('web/app.mjs');"));
     assert.ok(source.includes("__require('web/buffer.mjs').installBuffer();"));
+  });
+
+  test('the page wires markup removal, raw repairs and encoding controls', () => {
+    const html = fs.readFileSync(indexFile, 'utf8');
+    ['htmlToPlainText', 'rtfToPlainText', 'lintRawText', 'renderLintReport', 'encodeOutput'].forEach((name) => {
+      assert.ok(html.includes(name), name);
+    });
+    ['outEncoding', 'outBom', 'outEol', 'btnIssues', 'issuesBox'].forEach((id) => {
+      assert.ok(html.includes('id="' + id + '"'), id);
+    });
   });
 
   test('the page reports when the bundle did not run', () => {

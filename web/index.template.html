@@ -230,14 +230,14 @@
   .download-link:hover { background: var(--accent-light); border-color: var(--accent); color: var(--accent); }
 
   /* ===== 报告 ===== */
-  pre#report {
+  pre#report, pre#issues {
     background: var(--bg-subtle); border: 1px solid var(--border); border-radius: var(--radius-sm);
     padding: 16px; max-height: 480px; overflow: auto; font-size: 12.5px; line-height: 1.7;
     white-space: pre-wrap; word-break: break-all; color: var(--text-secondary);
     font-family: "JetBrains Mono", ui-monospace, monospace;
   }
-  pre#report::-webkit-scrollbar { width: 6px; }
-  pre#report::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
+  pre#report::-webkit-scrollbar, pre#issues::-webkit-scrollbar { width: 6px; }
+  pre#report::-webkit-scrollbar-thumb, pre#issues::-webkit-scrollbar-thumb { background: var(--border-strong); border-radius: 3px; }
 
   @keyframes fadeUp {
     from { opacity: 0; transform: translateY(8px); }
@@ -279,6 +279,11 @@
   }
   .file-item .name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: var(--text-primary); }
   .file-item .meta { color: var(--text-muted); font-size: 12px; font-variant-numeric: tabular-nums; flex-shrink: 0; }
+  .file-item .badge {
+    flex-shrink: 0; font-size: 11px; font-weight: 600; letter-spacing: .04em;
+    padding: 2px 7px; border-radius: 5px; color: var(--accent);
+    background: var(--accent-light);
+  }
   .file-item .remove {
     flex-shrink: 0; border: none; background: none; color: var(--text-muted);
     cursor: pointer; font-size: 12px; padding: 3px 8px; border-radius: 6px;
@@ -399,7 +404,7 @@
     <input type="file" id="fileInput" multiple
            accept=".txt,.text,.md,.markdown,.html,.htm,.xhtml,.rtf,.json,.jsonl,.yaml,.yml,.xml,.csv,.tsv,.js,.mjs,.cjs,.ts,.rst,.ini,.conf,.log,.srt,.tex,.org">
     <p class="dropzone-title">拖拽文本到这里，或点击选择</p>
-    <p class="hint">可一次选择多个文件；编码自动识别（UTF-8 / UTF-16 / GBK / GB18030 / Big5）</p>
+    <p class="hint">可一次选择多个文件；编码自动识别（UTF-8 / UTF-16 / GBK / GB18030 / Big5）；HTML / RTF 会先去标记。DOCX / EPUB / PDF 请用命令行。</p>
   </div>
   <div class="file-list" id="fileList"></div>
 
@@ -457,6 +462,24 @@
 
 <div class="card">
   <h2>输出格式</h2>
+  <div class="grid3">
+    <div class="field">
+      <label for="outEncoding">输出编码</label>
+      <select id="outEncoding"></select>
+    </div>
+    <div class="field">
+      <label for="outEol">换行符</label>
+      <select id="outEol">
+        <option value="lf">LF（Unix / macOS）</option>
+        <option value="crlf">CRLF（Windows）</option>
+      </select>
+    </div>
+    <div class="field">
+      <label>BOM</label>
+      <div class="chips"><label class="chip"><input type="checkbox" id="outBom"> 写入 BOM</label></div>
+    </div>
+  </div>
+  <p class="note-line">GBK / Big5 / GB18030 输出需要系统 iconv，浏览器版不支持，请用命令行 <code>--encoding</code>；UTF-16 默认带 BOM。</p>
   <div class="chips" id="formats"></div>
   <div class="row-actions">
     <button class="btn-primary" id="btnProcess">开始处理</button>
@@ -479,8 +502,16 @@
 </div>
 
 <div class="card" id="reportBox" hidden>
-  <h2>处理报告</h2>
+  <h2>合并报告</h2>
   <pre id="report"></pre>
+</div>
+
+<div class="card" id="issuesBox" hidden>
+  <div class="preview-header">
+    <h2>检查报告</h2>
+    <button type="button" class="download-link" id="btnIssues">下载报告</button>
+  </div>
+  <pre id="issues"></pre>
 </div>
 
 <script>
